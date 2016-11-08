@@ -8,7 +8,7 @@
 from codecs import open
 from setuptools import setup
 
-VERSION = '0.1.0b7'
+VERSION = '0.1.0b8'
 
 CLASSIFIERS = [
     'Development Status :: 4 - Beta',
@@ -24,10 +24,10 @@ CLASSIFIERS = [
 ]
 
 DEPENDENCIES = [
-    'azure==2.0.0rc6',
-    'azure-cli-core',
+    'azure-mgmt-network==0.30.0rc6',
     'azure-mgmt-trafficmanager==0.30.0rc6',
-    'azure-mgmt-dns==0.30.0rc6'
+    'azure-mgmt-dns==0.30.0rc6',
+    'azure-cli-core'
 ]
 
 with open('README.rst', 'r', encoding='utf-8') as f:
@@ -43,7 +43,7 @@ setup(
     author_email='azpycli@microsoft.com',
     url='https://github.com/Azure/azure-cli',
     classifiers=CLASSIFIERS,
-    namespace_packages = [
+    namespace_packages=[
         'azure',
         'azure.cli',
         'azure.cli.command_modules',
@@ -102,10 +102,6 @@ setup(
         'azure.cli.command_modules.network.mgmt_express_route_circuit.lib',
         'azure.cli.command_modules.network.mgmt_express_route_circuit.lib.models',
         'azure.cli.command_modules.network.mgmt_express_route_circuit.lib.operations',
-        'azure.cli.command_modules.network.mgmt_express_route_peering',
-        'azure.cli.command_modules.network.mgmt_express_route_peering.lib',
-        'azure.cli.command_modules.network.mgmt_express_route_peering.lib.models',
-        'azure.cli.command_modules.network.mgmt_express_route_peering.lib.operations',
         'azure.cli.command_modules.network.mgmt_traffic_manager_profile',
         'azure.cli.command_modules.network.mgmt_traffic_manager_profile.lib',
         'azure.cli.command_modules.network.mgmt_traffic_manager_profile.lib.models',

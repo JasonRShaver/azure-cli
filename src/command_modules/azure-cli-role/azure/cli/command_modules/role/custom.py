@@ -12,7 +12,6 @@ import dateutil.parser
 
 from azure.cli.core._util import CLIError, todict, get_file_json
 import azure.cli.core._logging as _logging
-from azure.cli.core.help_files import helps
 
 from azure.cli.core.commands.client_factory import (get_mgmt_service_client,
                                                     configure_common_settings)
@@ -44,10 +43,13 @@ def _auth_client_factory(scope=None):
     return get_mgmt_service_client(AuthorizationManagementClient, subscription_id=subscription_id)
 
 def _graph_client_factory(**_):
-    from azure.cli.core._profile import Profile
+    from azure.cli.core._profile import Profile, CLOUD
     profile = Profile()
-    cred, _, tenant_id = profile.get_login_credentials(True)
-    client = GraphRbacManagementClient(cred, tenant_id)
+    cred, _, tenant_id = profile.get_login_credentials(
+        resource=CLOUD.endpoints.active_directory_graph_resource_id)
+    client = GraphRbacManagementClient(cred,
+                                       tenant_id,
+                                       base_url=CLOUD.endpoints.active_directory_graph_resource_id)
     configure_common_settings(client)
     return client
 
@@ -58,34 +60,10 @@ def list_role_definitions(name=None, resource_group_name=None, scope=None,
                               definitions_client.config.subscription_id)
     return _search_role_definitions(definitions_client, name, scope, custom_role_only)
 
-helps['role create'] = """
-            type: command
-            parameters: 
-                - name: --role-definition
-                  type: string
-                  short-summary: 'JSON formatted string or a path to a file with such content'
-            examples:
-                - name: Create a role with following definition content
-                  text: |
-                        {
-                            "Name": "Contoso On-call",
-                            "Description": "Can monitor compute, network and storage, and restart virtual machines",
-                            "Actions": [
-                                "Microsoft.Compute/*/read",
-                                "Microsoft.Compute/virtualMachines/start/action",
-                                "Microsoft.Compute/virtualMachines/restart/action",
-                                "Microsoft.Network/*/read",
-                                "Microsoft.Storage/*/read",
-                                "Microsoft.Authorization/*/read",
-                                "Microsoft.Resources/subscriptions/resourceGroups/read",
-                                "Microsoft.Resources/subscriptions/resourceGroups/resources/read",
-                                "Microsoft.Insights/alertRules/*",
-                                "Microsoft.Support/*"
-                            ],
-                            "AssignableScopes": ["/subscriptions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"]
-                        }
+def get_role_definition_name_completion_list(prefix, **kwargs):#pylint: disable=unused-argument
+    definitions = list_role_definitions()
+    return [x.properties.role_name for x in list(definitions)]
 
-            """
 def create_role_definition(role_definition):
     role_id = uuid.uuid4()
     if os.path.exists(role_definition):
@@ -479,12 +457,12 @@ def _resolve_service_principal(client, identifier):
     except ValueError:
         raise CLIError("service principal '{}' doesn't exist".format(identifier))
 
-def create_service_principal_for_rbac(name=None, secret=None, years=1,
+def create_service_principal_for_rbac(name=None, password=None, years=1,
                                       scopes=None, role=None):
     '''create a service principal that can access or modify resources
     :param str name: an unique uri. If missing, the command will generate one.
-    :param str secret: the secret used to login. If missing, command will generate one.
-    :param str years: Years the secret will be valid.
+    :param str password: the password used to login. If missing, command will generate one.
+    :param str years: Years the password will be valid.
     :param str scopes: space separated scopes the service principal's role assignment applies to.
     :param str role: role the service principal has on the resources. only use with 'resource-ids'.
     '''
@@ -497,18 +475,17 @@ def create_service_principal_for_rbac(name=None, secret=None, years=1,
         name = 'http://' + app_display_name # just a valid uri, no need to exist
 
     end_date = start_date + relativedelta(years=years)
-    secret = secret or str(uuid.uuid4())
+    password = password or str(uuid.uuid4())
     aad_application = create_application(client.applications, display_name=app_display_name, #pylint: disable=too-many-function-args
                                          homepage='http://'+app_display_name,
                                          identifier_uris=[name],
                                          available_to_other_tenants=False,
-                                         password=secret,
+                                         password=password,
                                          start_date=start_date,
                                          end_date=end_date)
     #pylint: disable=no-member
     aad_sp = _create_service_principal(aad_application.app_id, bool(scopes))
     oid = aad_sp.output.object_id if scopes else aad_sp.object_id
-    _build_output_content(name, secret, client.config.tenant_id)
 
     if scopes:
         #It is possible the SP has not been propagated to all servers, so creating assignments
@@ -518,12 +495,19 @@ def create_service_principal_for_rbac(name=None, secret=None, years=1,
         for scope in scopes:
             _create_role_assignment(role, oid, None, scope, ocp_aad_session_key=session_key)
 
-def reset_service_principal_credential(name, secret=None, years=1):
+    return {
+        'appId': aad_application.app_id,
+        'password': password,
+        'name': name,
+        'tenant': client.config.tenant_id
+        }
+
+def reset_service_principal_credential(name, password=None, years=1):
     '''reset credential, on expiration or you forget it.
 
     :param str name: the uri representing the name of the service principal
-    :param str secret: the secret used to login. If missing, command will generate one.
-    :param str years: Years the secret will be valid.
+    :param str password: the password used to login. If missing, command will generate one.
+    :param str years: Years the password will be valid.
     '''
     client = _graph_client_factory()
 
@@ -544,32 +528,21 @@ def reset_service_principal_credential(name, secret=None, years=1):
         raise CLIError('can\'t find a service principal matching \'{}\''.format(name))
 
     #build a new password credential and patch it
-    secret = secret or str(uuid.uuid4())
+    password = password or str(uuid.uuid4())
     start_date = datetime.datetime.now()
     end_date = start_date + relativedelta(years=years)
     key_id = str(uuid.uuid4())
-    app_cred = PasswordCredential(start_date, end_date, key_id, secret)
+    app_cred = PasswordCredential(start_date, end_date, key_id, password)
     app_create_param = ApplicationUpdateParameters(password_credentials=[app_cred])
 
     client.applications.patch(app.object_id, app_create_param)
 
-    _build_output_content(name, secret, client.config.tenant_id)
-
-def _build_output_content(sp_name, secret, tenant):
-    logger.warning("Service principal has been configured.")
-    logger.warning("  id(client_id):           " + sp_name)
-    logger.warning("  password(client_secret): " + secret)
-
-    logger.warning('Useful commands to manage azure:')
-    logger.warning('Assign a role:')
-    logger.warning('    az role assignment create --assignee %s --role Contributor', sp_name)
-    logger.warning('Log in:')
-    logger.warning('    az login --service-principal -u %s -p %s --tenant %s',
-                   sp_name, secret, tenant)
-    logger.warning('Reset credentials:')
-    logger.warning('    az ad sp reset-credentials --name %s', sp_name)
-    logger.warning('Revoke:')
-    logger.warning('    az ad app delete --id %s', sp_name)
+    return {
+        'appId': app.app_id,
+        'password': password,
+        'name': name,
+        'tenant': client.config.tenant_id
+        }
 
 def _resolve_object_id(assignee):
     client = _graph_client_factory()

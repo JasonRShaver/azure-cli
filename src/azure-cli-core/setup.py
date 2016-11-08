@@ -9,7 +9,7 @@ from __future__ import print_function
 from codecs import open
 from setuptools import setup
 
-VERSION = "0.1.0b7"
+VERSION = "0.1.0b8"
 
 # If we have source, validate that our version numbers match
 # This should prevent uploading releases with mismatched versions.
@@ -43,10 +43,9 @@ CLASSIFIERS = [
 
 # TODO These dependencies should be updated to reflect only what this package needs
 DEPENDENCIES = [
-    'adal>=0.4.1',
+    'adal>=0.4.2',
     'applicationinsights',
     'argcomplete>=1.3.0',
-    'azure==2.0.0rc6',
     'azure-mgmt-trafficmanager==0.30.0rc6',
     'azure-mgmt-dns==0.30.0rc6',
     'colorama',
@@ -83,7 +82,7 @@ setup(
     url='https://github.com/Azure/azure-cli',
     zip_safe=False,
     classifiers=CLASSIFIERS,
-    namespace_packages = [
+    namespace_packages=[
         'azure',
         'azure.cli'
     ],
@@ -91,8 +90,6 @@ setup(
         'azure.cli.core',
         'azure.cli.core.commands',
         'azure.cli.core.extensions',
-        'azure.cli.core.utils',
-
     ],
     install_requires=DEPENDENCIES
 )

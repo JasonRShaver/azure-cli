@@ -7,7 +7,6 @@ from __future__ import print_function
 import argparse
 import sys
 import textwrap
-import yaml
 
 from azure.cli.core.help_files import _load_help_file
 
@@ -82,8 +81,12 @@ def print_arguments(help_file):
     max_name_length = max(len(p.name) + (len(required_tag) if p.required else 0)
                           for p in help_file.parameters)
     last_group_name = None
+
+    group_registry = ArgumentGroupRegistry(
+        [p.group_name for p in help_file.parameters if p.group_name])
+
     for p in sorted(help_file.parameters,
-                    key=lambda p: get_group_priority(p.group_name)
+                    key=lambda p: group_registry.get_group_priority(p.group_name)
                     + str(not p.required) + p.name):
         indent = 1
         required_text = required_tag if p.required else ''
@@ -117,15 +120,26 @@ def print_arguments(help_file):
 
     return indent
 
-def get_group_priority(group_name):
-    priorities = {
-        None: 0,
-        'Generic Update Arguments': 5,
-        'Resource Id Arguments': 10,
-        'Global Arguments': 1000,
-        }
-    key = priorities.get(group_name, 1)
-    return "%06d" % key
+class ArgumentGroupRegistry(object): # pylint: disable=too-few-public-methods
+
+    def __init__(self, group_list):
+
+        self.priorities = {
+            None: 0,
+            'Resource Id Arguments': 1,
+            'Generic Update Arguments': 998,
+            'Global Arguments': 1000,
+            }
+        priority = 2
+        # any groups not already in the static dictionary should be prioritized alphabetically
+        other_groups = [g for g in sorted(list(set(group_list))) if g not in self.priorities]
+        for group in other_groups:
+            self.priorities[group] = priority
+            priority += 1
+
+    def get_group_priority(self, group_name):
+        key = self.priorities.get(group_name, 0)
+        return "%06d" % key
 
 def _print_header(help_file):
     indent = 0
@@ -229,7 +243,8 @@ class HelpFile(HelpObject): #pylint: disable=too-few-public-methods,too-many-ins
         description = getattr(options, 'description', None)
         try:
             self.short_summary = description[:description.index('.')]
-            self.long_summary = description[description.index('.') + 1:].lstrip()
+            long_summary = description[description.index('.') + 1:].lstrip()
+            self.long_summary = ' '.join(long_summary.splitlines())
         except (ValueError, AttributeError):
             self.short_summary = description
 
@@ -388,6 +403,7 @@ def _normalize_text(s):
     return initial_upper + trailing_period
 
 def _load_help_file_from_string(text):
+    import yaml
     try:
         return yaml.load(text) if text else None
     except Exception: #pylint: disable=broad-except

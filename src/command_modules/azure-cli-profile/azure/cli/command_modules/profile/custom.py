@@ -4,10 +4,10 @@
 #---------------------------------------------------------------------------------------------
 
 # pylint: disable=too-few-public-methods,too-many-arguments,no-self-use
-
+import requests
 from adal.adal_error import AdalError
 
-from azure.cli.core._profile import Profile
+from azure.cli.core._profile import Profile, CLOUD
 from azure.cli.core._util import CLIError
 import azure.cli.core._logging as _logging
 
@@ -18,19 +18,25 @@ def load_subscriptions():
     subscriptions = profile.load_cached_subscriptions()
     return subscriptions
 
-def list_subscriptions():
+def list_subscriptions(list_all=False): # pylint: disable=redefined-builtin
     '''List the imported subscriptions.'''
     subscriptions = load_subscriptions()
     if not subscriptions:
         logger.warning('Please run "az login" to access your accounts.')
-    return subscriptions
+    for sub in subscriptions:
+        sub['cloudName'] = sub.pop('environmentName', None)
+    return [sub for sub in subscriptions if list_all or sub['cloudName'] == CLOUD.name]
 
-def set_active_subscription(subscription_name_or_id):
+def show_subscription(subscription=None):
+    profile = Profile()
+    return profile.get_subscription(subscription)
+
+def set_active_subscription(subscription):
     '''Set the current subscription'''
     if not id:
         raise CLIError('Please provide subscription id or unique name.')
     profile = Profile()
-    profile.set_active_subscription(subscription_name_or_id)
+    profile.set_active_subscription(subscription)
 
 def account_clear():
     '''Clear all stored subscriptions. To clear individual, use \'logout\''''
@@ -66,7 +72,12 @@ def login(username=None, password=None, service_principal=None, tenant=None):
             if 'Server returned error in RSTR - ErrorCode' in msg:
                 raise CLIError("Logging in through command line is not supported. " + suggestion)
         raise CLIError(err)
-    return list(subscriptions)
+    except requests.exceptions.ConnectionError as err:
+        raise CLIError('Please ensure you have network connection. Error detail: ' + str(err))
+    all_subscriptions = list(subscriptions)
+    for sub in all_subscriptions:
+        sub['cloudName'] = sub.pop('environmentName', None)
+    return all_subscriptions
 
 def logout(username=None):
     '''Log out to remove accesses to Azure subscriptions'''

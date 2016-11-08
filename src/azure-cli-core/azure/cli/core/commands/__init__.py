@@ -12,11 +12,6 @@ import pkgutil
 from importlib import import_module
 from collections import OrderedDict, defaultdict
 
-from msrest.paging import Paged
-from msrest.exceptions import ClientException
-from msrestazure.azure_operation import AzureOperationPoller
-
-from azure.common import AzureException
 from azure.cli.core._util import CLIError
 import azure.cli.core._logging as _logging
 from azure.cli.core.telemetry import log_telemetry
@@ -89,6 +84,7 @@ class LongRunningOperation(object): #pylint: disable=too-few-public-methods
         time.sleep(self.poller_done_interval_ms / 1000.0)
 
     def __call__(self, poller):
+        from msrest.exceptions import ClientException
         logger.info("Starting long running operation '%s'", self.start_msg)
         correlation_message = ''
         while not poller.done():
@@ -116,7 +112,10 @@ class LongRunningOperation(object): #pylint: disable=too-few-public-methods
             except: #pylint: disable=bare-except
                 pass
 
-            raise CLIError('{}  {}'.format(message, correlation_message))
+            cli_error = CLIError('{}  {}'.format(message, correlation_message))
+            #capture response for downstream commands (webapp) to dig out more details
+            setattr(cli_error, 'response', getattr(client_exception, 'response', None))
+            raise cli_error
 
         logger.info("Long running operation '%s' completed with result %s",
                     self.start_msg, result)
@@ -172,7 +171,8 @@ def get_command_table(module_name=None):
     If the module is not found, all commands are loaded.
     '''
     loaded = False
-    if module_name:
+    # TODO Remove check for acs module. Issue #1110
+    if module_name and module_name != 'acs':
         try:
             import_module('azure.cli.command_modules.' + module_name)
             logger.info("Successfully loaded command table from module '%s'.", module_name)
@@ -224,6 +224,11 @@ def cli_command(name, operation, client_factory=None, transform=None, table_tran
 def create_command(name, operation, transform_result, table_transformer, client_factory):
 
     def _execute_command(kwargs):
+        from msrest.paging import Paged
+        from msrest.exceptions import ClientException
+        from msrestazure.azure_operation import AzureOperationPoller
+        from azure.common import AzureException
+
         client = client_factory(kwargs) if client_factory else None
         try:
             result = operation(client, **kwargs) if client else operation(**kwargs)

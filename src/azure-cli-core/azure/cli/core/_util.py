@@ -4,15 +4,11 @@
 #---------------------------------------------------------------------------------------------
 
 from __future__ import print_function
-from codecs import open as codecs_open
-from datetime import datetime, timedelta
-import json
-import platform
 import re
 import sys
+import json
+from datetime import datetime, timedelta
 from enum import Enum
-
-from msrestazure.azure_exceptions import CloudError
 
 import azure.cli.core._logging as _logging
 
@@ -30,6 +26,7 @@ class CLIError(Exception):
 
 def handle_exception(ex):
     #For error code, follow guidelines at https://docs.python.org/2/library/sys.html#sys.exit,
+    from msrestazure.azure_exceptions import CloudError
     if isinstance(ex, CLIError) or isinstance(ex, CloudError):
         logger.error(ex.args[0])
         return ex.args[1] if len(ex.args) >= 2 else 1
@@ -43,6 +40,7 @@ def normalize_newlines(str_to_normalize):
     return str_to_normalize.replace('\r\n', '\n')
 
 def show_version_info_exit(out_file):
+    import platform
     from pip import get_installed_distributions
     installed_dists = get_installed_distributions(local_only=True)
 
@@ -68,7 +66,22 @@ def show_version_info_exit(out_file):
     print('Python ({}) {}'.format(platform.system(), sys.version), file=out_file)
     sys.exit(0)
 
+def get_json_object(json_string):
+    """ Loads a JSON string as an object and converts all keys to snake case """
+    def _convert_to_snake_case(item):
+        if isinstance(item, dict):
+            new_item = {}
+            for key, val in item.items():
+                new_item[to_snake_case(key)] = _convert_to_snake_case(val)
+            return new_item
+        if isinstance(item, list):
+            return [_convert_to_snake_case(x) for x in item]
+        else:
+            return item
+    return _convert_to_snake_case(json.loads(json_string))
+
 def get_file_json(file_path, throw_on_empty=True):
+    from codecs import open as codecs_open
     #always try 'utf-8-sig' first, so that BOM in WinOS won't cause trouble.
     for encoding in ('utf-8-sig', 'utf-8', 'utf-16', 'utf-16le', 'utf-16be'):
         try:
@@ -86,10 +99,7 @@ def get_file_json(file_path, throw_on_empty=True):
 
     raise CLIError('Failed to decode file {} - unknown decoding'.format(file_path))
 
-KEYS_CAMELCASE_PATTERN = re.compile('(?!^)_([a-zA-Z])')
 def todict(obj): #pylint: disable=too-many-return-statements
-    def to_camelcase(s):
-        return re.sub(KEYS_CAMELCASE_PATTERN, lambda x: x.group(1).upper(), s)
 
     if isinstance(obj, dict):
         return {k: todict(v) for (k, v) in obj.items()}
@@ -104,8 +114,16 @@ def todict(obj): #pylint: disable=too-many-return-statements
     elif hasattr(obj, '_asdict'):
         return todict(obj._asdict())
     elif hasattr(obj, '__dict__'):
-        return dict([(to_camelcase(k), todict(v))
+        return dict([(to_camel_case(k), todict(v))
                      for k, v in obj.__dict__.items()
                      if not callable(v) and not k.startswith('_')])
     else:
         return obj
+
+KEYS_CAMELCASE_PATTERN = re.compile('(?!^)_([a-zA-Z])')
+def to_camel_case(s):
+    return re.sub(KEYS_CAMELCASE_PATTERN, lambda x: x.group(1).upper(), s)
+
+def to_snake_case(s):
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', s)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()

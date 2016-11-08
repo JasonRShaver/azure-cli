@@ -100,6 +100,8 @@ class Application(object):
             self.session['command'] = expanded_arg.command
             try:
                 _validate_arguments(expanded_arg)
+            except CLIError:
+                raise
             except: # pylint: disable=bare-except
                 err = sys.exc_info()[1]
                 getattr(expanded_arg, '_parser', self.parser).validation_error(str(err))
@@ -166,7 +168,6 @@ class Application(object):
     @staticmethod
     def _register_builtin_arguments(**kwargs):
         global_group = kwargs['global_group']
-        global_group.add_argument('--subscription', dest='_subscription_id', help=argparse.SUPPRESS)
         global_group.add_argument('--output', '-o', dest='_output_format',
                                   choices=['json', 'tsv', 'list', 'table', 'jsonc'],
                                   default=az_config.get('core', 'output', fallback='json'),

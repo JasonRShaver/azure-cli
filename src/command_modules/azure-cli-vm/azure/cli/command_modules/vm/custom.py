@@ -444,7 +444,7 @@ def enable_boot_diagnostics(resource_group_name, vm_name, storage):
 def get_boot_log(resource_group_name, vm_name):
     import sys
     import io
-
+    from azure.cli.core._profile import CLOUD
     from azure.storage.blob import BlockBlobService
 
     client = _compute_client_factory()
@@ -484,7 +484,8 @@ def get_boot_log(resource_group_name, vm_name):
     storage_client = get_data_service_client(
         BlockBlobService,
         storage_account.name,
-        keys.key1) # pylint: disable=no-member
+        keys.key1,
+        endpoint_suffix=CLOUD.suffixes.storage_endpoint) # pylint: disable=no-member
 
     class StreamWriter(object): # pylint: disable=too-few-public-methods
 
@@ -1011,3 +1012,16 @@ def vmss_set(**kwargs):
     return _compute_client_factory().virtual_machine_scale_sets.create_or_update(**kwargs)
 
 cli_generic_update_command('vmss update', vmss_get, vmss_set)
+
+def update_acs(resource_group_name, container_service_name, new_agent_count):
+    client = _compute_client_factory()
+    instance = client.container_services.get(resource_group_name, container_service_name)
+    instance.agent_pool_profiles[0].count = new_agent_count
+    return client.container_services.create_or_update(resource_group_name,
+                                                      container_service_name, instance)
+
+def list_container_services(client, resource_group_name=None):
+    ''' List Container Services. '''
+    svc_list = client.list_by_resource_group(resource_group_name=resource_group_name) \
+        if resource_group_name else client.list()
+    return list(svc_list)

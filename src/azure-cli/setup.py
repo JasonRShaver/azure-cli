@@ -9,7 +9,7 @@ from __future__ import print_function
 from codecs import open
 from setuptools import setup
 
-VERSION = "0.1.0b7"
+VERSION = "0.1.0b8"
 
 # If we have source, validate that our version numbers match
 # This should prevent uploading releases with mismatched versions.
@@ -42,8 +42,11 @@ CLASSIFIERS = [
 ]
 
 DEPENDENCIES = [
+    'azure-cli-appservice',
     'azure-cli-core',
     'azure-cli-component',
+    'azure-cli-cloud',
+    'azure-cli-context',
     'azure-cli-configure',
     'azure-cli-feedback',
     'azure-cli-network',
@@ -51,7 +54,7 @@ DEPENDENCIES = [
     'azure-cli-resource',
     'azure-cli-role',
     'azure-cli-storage',
-    'azure-cli-vm',
+    'azure-cli-vm'
 ]
 
 with open('README.rst', 'r', encoding='utf-8') as f:
@@ -73,7 +76,7 @@ setup(
         'az.completion.sh',
         'az.bat',
     ],
-    namespace_packages = [
+    namespace_packages=[
         'azure'
     ],
     packages=[

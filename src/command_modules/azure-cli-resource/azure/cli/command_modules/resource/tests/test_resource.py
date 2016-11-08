@@ -6,9 +6,10 @@
 import os
 import time
 # AZURE CLI RESOURCE TEST DEFINITIONS
-
-from azure.cli.core.utils.vcr_test_base import (VCRTestBase, JMESPathCheck, NoneCheck, BooleanCheck,
-                                                ResourceGroupVCRTestBase, MOCKED_SUBSCRIPTION_ID)
+from azure.cli.core.test_utils.vcr_test_base import (VCRTestBase, JMESPathCheck, NoneCheck,
+                                                     BooleanCheck,
+                                                     ResourceGroupVCRTestBase,
+                                                     MOCKED_SUBSCRIPTION_ID)
 
 #pylint: disable=method-hidden, line-too-long
 class ResourceGroupScenarioTest(VCRTestBase): # Not RG test base because it tests the actual deletion of a resource group
@@ -146,17 +147,21 @@ class ProviderRegistrationTest(VCRTestBase): # Not RG test base because it opera
 
     def body(self):
         provider = 'TrendMicro.DeepSecurity'
-        result = self.cmd('resource provider show -n {}'.format(provider), checks=None)
+        result = self.cmd('provider show -n {}'.format(provider), checks=None)
         if result['registrationState'] == 'Unregistered':
-            self.cmd('resource provider register -n {}'.format(provider), checks=None)
-            self.cmd('resource provider show -n {}'.format(provider), checks=[JMESPathCheck('registrationState', 'Registered')])
-            self.cmd('resource provider unregister -n {}'.format(provider), checks=None)
-            self.cmd('resource provider show -n {}'.format(provider), checks=[JMESPathCheck('registrationState', 'Unregistered')])
+            self.cmd('provider register -n {}'.format(provider), checks=None)
+            result = self.cmd('provider show -n {}'.format(provider))
+            self.assertTrue(result['registrationState'] in ['Registering', 'Registered'])
+            self.cmd('provider unregister -n {}'.format(provider), checks=None)
+            result = self.cmd('provider show -n {}'.format(provider))
+            self.assertTrue(result['registrationState'] in ['Unregistering', 'Unregistered'])
         else:
-            self.cmd('resource provider unregister -n {}'.format(provider), checks=None)
-            self.cmd('resource provider show -n {}'.format(provider), checks=[JMESPathCheck('registrationState', 'Unregistered')])
-            self.cmd('resource provider register -n {}'.format(provider), checks=None)
-            self.cmd('resource provider show -n {}'.format(provider), checks=[JMESPathCheck('registrationState', 'Registered')])
+            self.cmd('provider unregister -n {}'.format(provider), checks=None)
+            result = self.cmd('provider show -n {}'.format(provider))
+            self.assertTrue(result['registrationState'] in ['Unregistering', 'Unregistered'])
+            self.cmd('provider register -n {}'.format(provider), checks=None)
+            result = self.cmd('provider show -n {}'.format(provider))
+            self.assertTrue(result['registrationState'] in ['Registering', 'Registered'])
 
 class DeploymentTest(ResourceGroupVCRTestBase):
     def __init__(self, test_method):
@@ -171,24 +176,56 @@ class DeploymentTest(ResourceGroupVCRTestBase):
         template_file = os.path.join(curr_dir, 'simple_deploy.json').replace('\\', '\\\\')
         parameters_file = os.path.join(curr_dir, 'simple_deploy_parameters.json').replace('\\', '\\\\')
         deployment_name = 'azure-cli-deployment'
-        result = self.cmd('resource group deployment validate -g {} --template-file-path {} --parameters-file-path {}'.format(
-            self.resource_group, template_file, parameters_file), checks=None)
-        self.assertEqual('Accepted', result['properties']['provisioningState'])
-        result = self.cmd('resource group deployment create -g {} -n {} --template-file-path {} --parameters-file-path {}'.format(
-            self.resource_group, deployment_name, template_file, parameters_file), checks=None)
-        self.assertEqual('Succeeded', result['properties']['provisioningState'])
-        self.assertEqual(self.resource_group, result['resourceGroup'])
-        result = self.cmd('resource group deployment list -g {}'.format(self.resource_group), checks=None)
-        self.assertEqual(deployment_name, result[0]['name'])
-        self.assertEqual(self.resource_group, result[0]['resourceGroup'])
-        result = self.cmd('resource group deployment show -g {} -n {}'.format(self.resource_group, deployment_name), checks=None)
-        self.assertEqual(deployment_name, result['name'])
-        self.assertEqual(self.resource_group, result['resourceGroup'])
-        result = self.cmd('resource group deployment exists -g {} -n {}'.format(self.resource_group, deployment_name), checks=None)
-        self.assertTrue(result)
-        result = self.cmd('resource group deployment operation list -g {} -n {}'.format(self.resource_group, deployment_name), checks=None)
-        self.assertEqual(2, len(result))
-        self.assertEqual(self.resource_group, result[0]['resourceGroup'])
+
+        self.cmd('resource group deployment validate -g {} --template-file {} --parameters @{}'.format(
+            self.resource_group, template_file, parameters_file), checks=[
+                JMESPathCheck('properties.provisioningState', 'Accepted')
+                ])
+        self.cmd('resource group deployment create -g {} -n {} --template-file {} --parameters @{}'.format(
+            self.resource_group, deployment_name, template_file, parameters_file), checks=[
+                JMESPathCheck('properties.provisioningState', 'Succeeded'),
+                JMESPathCheck('resourceGroup', self.resource_group),
+                ])
+        self.cmd('resource group deployment list -g {}'.format(self.resource_group), checks=[
+            JMESPathCheck('[0].name', deployment_name),
+            JMESPathCheck('[0].resourceGroup', self.resource_group)
+            ])
+        self.cmd('resource group deployment show -g {} -n {}'.format(self.resource_group, deployment_name), checks=[
+            JMESPathCheck('name', deployment_name),
+            JMESPathCheck('resourceGroup', self.resource_group)
+            ])
+        self.cmd('resource group deployment operation list -g {} -n {}'.format(self.resource_group, deployment_name), checks=[
+            JMESPathCheck('length([])', 2),
+            JMESPathCheck('[0].resourceGroup', self.resource_group)
+            ])
+
+class DeploymentThruUriTest(ResourceGroupVCRTestBase):
+    def __init__(self, test_method):
+        super(DeploymentThruUriTest, self).__init__(__file__, test_method)
+        self.resource_group = 'azure-cli-deployment-uri-test'
+
+    def test_group_deployment_thru_uri(self):
+        self.execute()
+
+    def body(self):
+        curr_dir = os.path.dirname(os.path.realpath(__file__))
+        #same copy of the sample template file under current folder, but it is uri based now
+        template_uri = 'https://raw.githubusercontent.com/Azure/azure-cli/master/src/command_modules/azure-cli-resource/azure/cli/command_modules/resource/tests/simple_deploy.json'
+        parameters_file = os.path.join(curr_dir, 'simple_deploy_parameters.json').replace('\\', '\\\\')
+        deployment_name = 'simple_deploy' #auto-gen'd by command
+        result = self.cmd('resource group deployment create -g {} --template-uri {} --parameters @{}'.format(
+            self.resource_group, template_uri, parameters_file), checks=[
+                JMESPathCheck('properties.provisioningState', 'Succeeded'),
+                JMESPathCheck('resourceGroup', self.resource_group),
+                ])
+
+        result = self.cmd('resource group deployment show -g {} -n {}'.format(self.resource_group, deployment_name), checks=[
+            JMESPathCheck('name', deployment_name)
+            ])
+
+        self.cmd('resource group deployment delete -g {} -n {}'.format(self.resource_group, deployment_name))
+        result = self.cmd('resource group deployment list -g {}'.format(self.resource_group))
+        self.assertFalse(bool(result))
 
 class ResourceMoveScenarioTest(VCRTestBase): # Not RG test base because it uses two RGs and manually cleans them up
 
@@ -263,7 +300,7 @@ class PolicyScenarioTest(ResourceGroupVCRTestBase):
         curr_dir = os.path.dirname(os.path.realpath(__file__))
         rules_file = os.path.join(curr_dir, 'sample_policy_rule.json').replace('\\', '\\\\')
         #create a policy
-        self.cmd('resource policy create -n {} --rules {} --display-name {} --description {}'.format(
+        self.cmd('resource policy definition create -n {} --rules {} --display-name {} --description {}'.format(
             policy_name, rules_file, policy_display_name, policy_description), checks=[
                 JMESPathCheck('name', policy_name),
                 JMESPathCheck('displayName', policy_display_name),
@@ -272,15 +309,15 @@ class PolicyScenarioTest(ResourceGroupVCRTestBase):
 
         #update it
         new_policy_description = policy_description + '_new'
-        self.cmd('resource policy update -n {} --description {}'.format(policy_name, new_policy_description), checks=[
+        self.cmd('resource policy definition update -n {} --description {}'.format(policy_name, new_policy_description), checks=[
             JMESPathCheck('description', new_policy_description)
             ])
 
         #list and show it
-        self.cmd('resource policy list', checks=[
+        self.cmd('resource policy definition list', checks=[
             JMESPathCheck("length([?name=='{}'])".format(policy_name), 1)
             ])
-        self.cmd('resource policy show -n {}'.format(policy_name), checks=[
+        self.cmd('resource policy definition show -n {}'.format(policy_name), checks=[
             JMESPathCheck('name', policy_name),
             JMESPathCheck('displayName', policy_display_name)
             ])
@@ -304,17 +341,17 @@ class PolicyScenarioTest(ResourceGroupVCRTestBase):
             pass
 
         # but enable --show-all works
-        self.cmd('resource policy assignment list --show-all', checks=[
+        self.cmd('resource policy assignment list --disable-scope-strict-match', checks=[
             JMESPathCheck("length([?name=='{}'])".format(policy_assignment_name), 1),
             ])
 
         # delete the assignment
         self.cmd('resource policy assignment delete -n {} -g {}'.format(
             policy_assignment_name, self.resource_group))
-        self.cmd('resource policy assignment list --show-all')
+        self.cmd('resource policy assignment list --disable-scope-strict-match')
 
         # delete the policy
-        self.cmd('resource policy delete -n {}'.format(policy_name))
+        self.cmd('resource policy definition delete -n {}'.format(policy_name))
         time.sleep(10) # ensure the policy is gone when run live.
-        self.cmd('resource policy list', checks=[
+        self.cmd('resource policy definition list', checks=[
             JMESPathCheck("length([?name=='{}'])".format(policy_name), 0)])

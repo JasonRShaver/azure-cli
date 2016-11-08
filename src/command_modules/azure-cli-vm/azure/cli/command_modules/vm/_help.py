@@ -28,14 +28,6 @@ helps['vm create'] = """
                 - name: --ssh-key-value
                   short-summary: SSH public key or public key file path.
             examples:
-                - name: Create a simple Windows Server VM with private IP address only
-                  text: >
-                    az vm create -n my_vm_name -g myrg --admin-username myadmin --admin-password Password@1234 
-                     --public-ip-address "" --image Win2012R2Datacenter
-                - name: Create a simple Windows Server VM with public IP address and DNS entry
-                  text: >
-                    az vm create -n my_vm_name -g myrg --admin-username myadmin --admin-password Password@1234
-                    --public-ip-address-dns-name my_globally_unique_vm_dns_name --image Win2012R2Datacenter
                 - name: Create a Linux VM with SSH key authentication, add a public DNS entry and add to an existing Virtual Network and Availability Set.
                   text: >
                     az vm create -n my_vm_name -g myrg --image <linux image from 'az vm image list'>
@@ -44,6 +36,14 @@ helps['vm create'] = """
                     --availability-set my_existing_availability_set
                     --public-ip-address-dns-name my_globally_unique_vm_dns_name
                     --ssh-key-value "<ssh-rsa-key, key-file-path or not specified for default-key-path>"
+                - name: Create a simple Windows Server VM with private IP address only
+                  text: >
+                    az vm create -n my_vm_name -g myrg --admin-username myadmin --admin-password Password@1234 
+                     --public-ip-address "" --image Win2012R2Datacenter
+                - name: Create a simple Windows Server VM with public IP address and DNS entry
+                  text: >
+                    az vm create -n my_vm_name -g myrg --admin-username myadmin --admin-password Password@1234
+                    --public-ip-address-dns-name my_globally_unique_vm_dns_name --image Win2012R2Datacenter
             """.format(image_long_summary)
 
 helps['vmss create'] = """
@@ -91,7 +91,7 @@ helps['vm access reset-windows-admin'] = """
             long-summary: Note, this resets the admin's credentials. You can't add a new admin.
             """
 
-helps['vm container create'] = """
+helps['acs create'] = """
             type: command
             long-summary: See https://azure.microsoft.com/en-us/documentation/articles/container-service-intro/ for an intro to Container Service.
 """
@@ -159,9 +159,29 @@ helps['vm boot-diagnostics'] = """
     type: group
     short-summary: Troubleshoot virtual machine start-up
 """
-helps['vm container'] = """
+helps['acs'] = """
     type: group
-    short-summary: Use Docker-based tools to deploy and manage containers
+    short-summary: Manage Azure container services
+"""
+helps['acs create'] = """
+    type: command
+    short-summary: Create a container service with your preferred orchestrator
+"""
+helps['acs delete'] = """
+    type: command
+    short-summary: delete a container service
+"""
+helps['acs list'] = """
+    type: command
+    short-summary: list container services
+"""
+helps['acs show'] = """
+    type: command
+    short-summary: show a container service
+"""
+helps['acs scale'] = """
+    type: command
+    short-summary: change private agent count of a container service.
 """
 helps['vm diagnostics'] = """
     type: group
@@ -203,3 +223,37 @@ helps['vmss extension image'] = """
     type: group
     short-summary: Find scale-set extensions available for your subscription and region
 """
+helps['vm capture'] = """
+            type: command
+            long-summary: See https://azure.microsoft.com/en-us/documentation/articles/virtual-machines-linux-capture-image/ for an end-to-end tutorial
+            examples:
+                - name: Process to deallocate, generalize, and capture a stopped virtual machine
+                  text: >
+                    az vm deallocate -g my_rg -n my_vm_name\n\r
+                    az vm generalize -g my_rg -n my_vm_name\n\r
+                    az vm capture -g my_rg -n my_vm_name --vhd-name-prefix my_prefix\n\r
+                    """
+
+helps['vm deallocate'] = """
+            type: command
+            long-summary: See https://azure.microsoft.com/en-us/documentation/articles/virtual-machines-linux-capture-image/ for an end-to-end tutorial
+            examples:
+                - name: Process to deallocate, generalize, and capture a stopped virtual machine
+                  text: >
+                    az vm deallocate -g my_rg -n my_vm_name\n\r
+                    az vm generalize -g my_rg -n my_vm_name\n\r
+                    az vm capture -g my_rg -n my_vm_name --vhd-name-prefix my_prefix\n\r
+                    """
+
+helps['vm generalize'] = """
+            type: command
+            long-summary: See https://azure.microsoft.com/en-us/documentation/articles/virtual-machines-linux-capture-image/ for an end-to-end tutorial
+            examples:
+                - name: Process to deallocate, generalize, and capture a stopped virtual machine
+                  text: >
+                    az vm deallocate -g my_rg -n my_vm_name\n\r
+                    az vm generalize -g my_rg -n my_vm_name\n\r
+                    az vm capture -g my_rg -n my_vm_name --vhd-name-prefix my_prefix\n\r
+                    """
+
+
