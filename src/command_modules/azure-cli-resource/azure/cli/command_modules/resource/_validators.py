@@ -1,45 +1,21 @@
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
-import collections
 import os
+
 try:
     from urllib.parse import urlparse, urlsplit
 except ImportError:
-    from urlparse import urlparse, urlsplit # pylint: disable=import-error
+    from urlparse import urlparse, urlsplit  # pylint: disable=import-error
 
-from azure.cli.core.parser import IncorrectUsageError
 
-from ._factory import _resource_client_factory
+from azure.cli.core.util import CLIError
 
-def validate_resource_type(string):
-    ''' Validates that resource type is provided in <namespace>/<type> format '''
-    type_comps = string.split('/')
-    try:
-        namespace_comp = type_comps[0]
-        resource_comp = type_comps[1]
-    except IndexError:
-        raise IncorrectUsageError('Parameter --resource-type must be in <namespace>/<type> format.')
-    ResourceType = collections.namedtuple('ResourceType', 'namespace type')
-    return ResourceType(namespace=namespace_comp, type=resource_comp)
-
-def validate_parent(string):
-    ''' Validates that parent is provided in <type>/<name> format '''
-    if not string:
-        return string
-    parent_comps = string.split('/')
-    try:
-        type_comp = parent_comps[0]
-        name_comp = parent_comps[1]
-    except IndexError:
-        raise IncorrectUsageError('Parameter --parent must be in <type>/<name> format.')
-    ParentType = collections.namedtuple('ParentType', 'type name')
-    return ParentType(type=type_comp, name=name_comp)
 
 def validate_deployment_name(namespace):
-    #If missing,try come out with a name associated with the template name
+    # If missing,try come out with a name associated with the template name
     if namespace.deployment_name is None:
         template_filename = None
         if namespace.template_file and os.path.isfile(namespace.template_file):
@@ -52,38 +28,44 @@ def validate_deployment_name(namespace):
         else:
             namespace.deployment_name = 'deployment1'
 
-def _resolve_api_version(rcf, resource_type, parent=None):
 
-    provider = rcf.providers.get(resource_type.namespace)
-    resource_type_str = '{}/{}'.format(parent.type, resource_type.type) \
-        if parent else resource_type.type
-
-    rt = [t for t in provider.resource_types if t.resource_type == resource_type_str]
-    if not rt:
-        raise IncorrectUsageError('Resource type {} not found.'
-                                  .format(resource_type_str))
-    if len(rt) == 1 and rt[0].api_versions:
-        npv = [v for v in rt[0].api_versions if 'preview' not in v.lower()]
-        return npv[0] if npv else rt[0].api_versions[0]
-    else:
-        raise IncorrectUsageError(
-            'API version is required and could not be resolved for resource {}/{}'
-            .format(resource_type.namespace, resource_type.type))
-
-def resolve_resource_parameters(namespace):
-    n = namespace
-
-    param_set = set(['resource_type', 'api_version',
-                     'resource_provider_namespace', 'parent_resource_path'])
-    if not param_set.issubset(set(n.__dict__.keys())):
+def internal_validate_lock_parameters(resource_group_name, resource_provider_namespace,
+                                      parent_resource_path, resource_type, resource_name):
+    if resource_group_name is None:
+        if resource_name is not None:
+            raise CLIError('--resource-name is ignored if --resource-group is not given.')
+        if resource_type is not None:
+            raise CLIError('--resource-type is ignored if --resource-group is not given.')
+        if resource_provider_namespace is not None:
+            raise CLIError('--namespace is ignored if --resource-group is not given.')
+        if parent_resource_path is not None:
+            raise CLIError('--parent is ignored if --resource-group is not given.')
         return
 
-    resource_tuple = n.resource_type
-    parent_tuple = n.parent_resource_path
+    if resource_name is None:
+        if resource_type is not None:
+            raise CLIError('--resource-type is ignored if --resource-name is not given.')
+        if resource_provider_namespace is not None:
+            raise CLIError('--namespace is ignored if --resource-name is not given.')
+        if parent_resource_path is not None:
+            raise CLIError('--parent is ignored if --resource-name is not given.')
+        return
 
-    rcf = _resource_client_factory()
-    n.api_version = n.api_version or _resolve_api_version(rcf, resource_tuple, parent_tuple)
-    n.resource_type = resource_tuple.type
-    n.resource_provider_namespace = resource_tuple.namespace
-    n.parent_resource_path = '{}/{}'.format(parent_tuple.type, parent_tuple.name) \
-        if parent_tuple else ''
+    if not resource_type:
+        raise CLIError('--resource-type is required if --resource-name is present')
+
+    parts = resource_type.split('/')
+    if resource_provider_namespace is None:
+        if len(parts) == 1:
+            raise CLIError('A resource namespace is required if --resource-name is present.'
+                           'Expected <namespace>/<type> or --namespace=<namespace>')
+    elif len(parts) != 1:
+        raise CLIError('Resource namespace specified in both --resource-type and --namespace')
+
+
+def validate_lock_parameters(namespace):
+    internal_validate_lock_parameters(getattr(namespace, 'resource_group_name', None),
+                                      getattr(namespace, 'resource_provider_namespace', None),
+                                      getattr(namespace, 'parent_resource_path', None),
+                                      getattr(namespace, 'resource_type', None),
+                                      getattr(namespace, 'resource_name', None))

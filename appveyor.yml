@@ -12,11 +12,8 @@ environment:
 
 install:
   - SET PATH=%PYTHON%;%PYTHON%\Scripts;%PATH%
-  - python -m pip install -r requirements.txt
-  - python -m pip install -e src/azure-cli-core
-  - python -m pip install sphinx
-  - python scripts/command_modules/install.py # Install the command modules as packages
-  - python -m pip install -e src/azure-cli
+  - python scripts/dev_setup.py
+  - python -m pip install sphinx==1.5.6
 
 build_script:
   - ps: |
@@ -49,7 +46,7 @@ build_script:
   - cd %TEMP%\azure-cli-xml2yml
   - nuget install azure.cli.doc.xml2yml -Source https://ci.appveyor.com/nuget/azure-docs-cli-pre-process
   - cd azure.cli.doc.xml2yml*\tools
-  - AzCliDocPreprocessor -s "%APPVEYOR_BUILD_FOLDER%\doc\sphinx\_build\xml\ind.xml" -d "%TEMP%\azure-cli-xml2yml\yml-output" -r "https://github.com/%APPVEYOR_REPO_NAME%" -b "%APPVEYOR_REPO_BRANCH%" -c "%APPVEYOR_BUILD_FOLDER%\doc\sphinx\doc_commit_map.json"
+  - AzCliDocPreprocessor -s "%APPVEYOR_BUILD_FOLDER%\doc\sphinx\_build\xml\ind.xml" -d "%TEMP%\azure-cli-xml2yml\yml-output" -r "https://github.com/%APPVEYOR_REPO_NAME%" -b "%APPVEYOR_REPO_BRANCH%" -c "%APPVEYOR_BUILD_FOLDER%\doc\sphinx\doc_commit_map.json" -v 1
 
 artifacts:
   - path: doc\sphinx\_build
@@ -63,5 +60,6 @@ on_success:
   - if exist %TEMP%\azure-cli-content\%YML_OUTPUT_FOLDER% ((cd %TEMP%\azure-cli-content\%YML_OUTPUT_FOLDER%) & (del %FILES_TO_DELETE% /f /q) & (for /d %%p IN (*) do rmdir "%%p" /s /q))
   - cd %TEMP%\azure-cli-content
   - SETLOCAL EnableDelayedExpansion & robocopy %TEMP%\azure-cli-xml2yml\yml-output %TEMP%\azure-cli-content\%YML_OUTPUT_FOLDER% /e & IF !ERRORLEVEL! EQU 1 (exit 0) ELSE (IF !ERRORLEVEL! EQU 3 (exit 0) ELSE (exit 1))
+  - ps: .\merge-toc.ps1 "$env:YML_OUTPUT_FOLDER" "$env:CONCEPTUAL_DOC_FOLDER"
   - git add -A
   - git diff --quiet --exit-code --cached || git commit -m "Update Document Content" && git push origin %TARGET_BRANCH% && appveyor AddMessage "Document Updated"

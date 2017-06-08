@@ -1,135 +1,63 @@
-﻿#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
-
-from azure.mgmt.network.operations import (
-    ApplicationGatewaysOperations,
-    ExpressRouteCircuitAuthorizationsOperations,
-    ExpressRouteCircuitPeeringsOperations,
-    ExpressRouteCircuitsOperations,
-    ExpressRouteServiceProvidersOperations,
-    LoadBalancersOperations,
-    LocalNetworkGatewaysOperations,
-    NetworkInterfacesOperations,
-    NetworkSecurityGroupsOperations,
-    PublicIPAddressesOperations,
-    RouteTablesOperations,
-    RoutesOperations,
-    SecurityRulesOperations,
-    SubnetsOperations,
-    UsagesOperations,
-    VirtualNetworkGatewayConnectionsOperations,
-    VirtualNetworkGatewaysOperations,
-    VirtualNetworksOperations,
-    VirtualNetworkPeeringsOperations)
-
-from azure.mgmt.trafficmanager.operations import EndpointsOperations, ProfilesOperations
-from azure.mgmt.trafficmanager import TrafficManagerManagementClient
-from azure.mgmt.dns.operations import RecordSetsOperations, ZonesOperations
-from azure.mgmt.dns import DnsManagementClient
-
-from azure.cli.core.commands.client_factory import get_mgmt_service_client
-from azure.cli.core.commands.arm import cli_generic_update_command
-from azure.cli.command_modules.network.mgmt_app_gateway.lib.operations import AppGatewayOperations
-from azure.cli.command_modules.network.mgmt_app_gateway.lib \
-    import AppGatewayCreationClient as AppGatewayClient
-from azure.cli.command_modules.network.mgmt_vnet.lib \
-    import VnetCreationClient as VNetClient
-from azure.cli.command_modules.network.mgmt_vnet.lib.operations import VnetOperations
-from azure.cli.command_modules.network.mgmt_public_ip.lib \
-    import PublicIpCreationClient as PublicIPClient
-from azure.cli.command_modules.network.mgmt_public_ip.lib.operations import PublicIpOperations
-from azure.cli.command_modules.network.mgmt_lb.lib import LbCreationClient as LBClient
-from azure.cli.command_modules.network.mgmt_lb.lib.operations import LbOperations
-from azure.cli.command_modules.network.mgmt_nic.lib import NicCreationClient as NicClient
-from azure.cli.command_modules.network.mgmt_nic.lib.operations import NicOperations
-from azure.cli.command_modules.network.mgmt_nsg.lib import NsgCreationClient as NSGClient
-from azure.cli.command_modules.network.mgmt_nsg.lib.operations import NsgOperations
-from azure.cli.command_modules.network.mgmt_vnet_gateway.lib.operations \
-    import VnetGatewayOperations
-from azure.cli.command_modules.network.mgmt_vnet_gateway.lib \
-    import VnetGatewayCreationClient as VnetGatewayClient
-from azure.cli.command_modules.network.mgmt_local_gateway.lib.operations \
-    import LocalGatewayOperations
-from azure.cli.command_modules.network.mgmt_local_gateway.lib \
-    import LocalGatewayCreationClient as LocalGatewayClient
-from azure.cli.command_modules.network.mgmt_route_table.lib.operations import RouteTableOperations
-from azure.cli.command_modules.network.mgmt_route_table.lib \
-    import RouteTableCreationClient as RouteTableClient
-from azure.cli.command_modules.network.mgmt_vpn_connection.lib.operations \
-    import VpnConnectionOperations
-from azure.cli.command_modules.network.mgmt_vpn_connection.lib \
-    import VpnConnectionCreationClient as VpnConnectionClient
-from azure.cli.command_modules.network.mgmt_express_route_circuit.lib.operations \
-    import ExpressRouteCircuitOperations
-from azure.cli.command_modules.network.mgmt_express_route_circuit.lib \
-    import ExpressRouteCircuitCreationClient as ExpressRouteCircuitClient
-from azure.cli.command_modules.network.mgmt_traffic_manager_profile.lib.operations \
-    import TrafficManagerProfileOperations
-from azure.cli.command_modules.network.mgmt_traffic_manager_profile.lib \
-    import TrafficManagerProfileCreationClient as TrafficManagerProfileClient
-from azure.cli.command_modules.network.mgmt_dns_zone.lib.operations \
-    import DnsZoneOperations
-from azure.cli.command_modules.network.mgmt_dns_zone.lib \
-    import DnsZoneCreationClient as DnsZoneClient
-
-from azure.cli.core.commands import DeploymentOutputLongRunningOperation, cli_command
-
-from .custom import \
-    (update_vnet, update_subnet, create_subnet,
-     create_ag_ssl_cert,
-     create_ag_address_pool,
-     create_ag_frontend_ip,
-     create_ag_frontend_port,
-     create_ag_http_listener,
-     create_ag_http_settings,
-     create_ag_probe,
-     create_ag_rule,
-     create_ag_url_path_map,
-     create_ag_url_path_map_rule, delete_ag_url_path_map_rule,
-     create_nsg_rule, update_nsg_rule,
-     create_lb_inbound_nat_rule, set_lb_inbound_nat_rule,
-     create_lb_frontend_ip_configuration, set_lb_frontend_ip_configuration,
-     create_lb_inbound_nat_pool, set_lb_inbound_nat_pool,
-     create_lb_backend_address_pool,
-     create_lb_probe, set_lb_probe,
-     create_lb_rule, set_lb_rule,
-     create_nic_ip_config, set_nic_ip_config,
-     add_nic_ip_config_address_pool, remove_nic_ip_config_address_pool,
-     add_nic_ip_config_inbound_nat_rule, remove_nic_ip_config_inbound_nat_rule,
-     set_nic,
-     list_network_resource_property, get_network_resource_property_entry,
-     delete_network_resource_property_entry,
-     list_application_gateways, list_express_route_circuits, list_lbs, list_nics, list_nsgs,
-     list_public_ips, list_route_tables, list_vnet, create_vnet_peering, create_route,
-     update_network_vpn_gateway, create_vpn_gateway_root_cert, delete_vpn_gateway_root_cert,
-     create_vpn_gateway_revoked_cert, delete_vpn_gateway_revoked_cert,
-     create_express_route_peering,
-     list_traffic_manager_profiles, create_traffic_manager_endpoint, list_dns_zones,
-     create_dns_record_set, add_dns_aaaa_record, add_dns_a_record, add_dns_cname_record,
-     add_dns_ns_record, add_dns_ptr_record, update_dns_soa_record, add_dns_srv_record,
-     add_dns_txt_record, add_dns_mx_record,
-     remove_dns_aaaa_record, remove_dns_a_record, remove_dns_cname_record,
-     remove_dns_ns_record, remove_dns_ptr_record, remove_dns_srv_record,
-     remove_dns_txt_record, remove_dns_mx_record, list_traffic_manager_endpoints,
-     export_zone, import_zone)
-from ._factory import _network_client_factory
+# --------------------------------------------------------------------------------------------
 
 # pylint: disable=line-too-long
-# Application gateways
-factory = lambda _: _network_client_factory().application_gateways
-cli_command('network application-gateway delete', ApplicationGatewaysOperations.delete, factory)
-cli_command('network application-gateway show', ApplicationGatewaysOperations.get, factory)
-cli_command('network application-gateway list', list_application_gateways)
-cli_command('network application-gateway start', ApplicationGatewaysOperations.start, factory)
-cli_command('network application-gateway stop', ApplicationGatewaysOperations.stop, factory)
-cli_generic_update_command('network application-gateway update', ApplicationGatewaysOperations.get, ApplicationGatewaysOperations.create_or_update, factory)
 
-factory = lambda _: get_mgmt_service_client(AppGatewayClient).app_gateway
-cli_command('network application-gateway create', AppGatewayOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network application-gateway create'))
+from azure.cli.core.commands.arm import cli_generic_update_command, cli_generic_wait_command
+from azure.cli.core.commands import \
+    (DeploymentOutputLongRunningOperation, cli_command)
+from azure.cli.core.util import empty_on_404
+from azure.cli.core.profiles import supported_api_version, ResourceType
+
+from ._client_factory import (cf_application_gateways, cf_express_route_circuit_authorizations,
+                              cf_express_route_circuit_peerings, cf_express_route_circuits,
+                              cf_express_route_service_providers, cf_load_balancers, cf_local_network_gateways,
+                              cf_network_interfaces, cf_network_security_groups, cf_network_watcher, cf_packet_capture,
+                              cf_route_tables, cf_routes, cf_route_filter_rules, cf_route_filters, cf_virtual_networks,
+                              cf_virtual_network_peerings, cf_virtual_network_gateway_connections,
+                              cf_virtual_network_gateways, cf_traffic_manager_mgmt_endpoints,
+                              cf_traffic_manager_mgmt_profiles, cf_dns_mgmt_record_sets, cf_dns_mgmt_zones,
+                              cf_tm_geographic, cf_security_rules, cf_subnets, cf_usages, cf_service_community,
+                              cf_public_ip_addresses)
+from ._util import (list_network_resource_property,
+                    get_network_resource_property_entry,
+                    delete_network_resource_property_entry)
+from ._format import \
+    (transform_local_gateway_table_output, transform_dns_record_set_output,
+     transform_dns_record_set_table_output, transform_dns_zone_table_output,
+     transform_vnet_create_output, transform_public_ip_create_output,
+     transform_traffic_manager_create_output, transform_nic_create_output,
+     transform_nsg_create_output, transform_vnet_gateway_create_output,
+     transform_vpn_connection, transform_vpn_connection_list,
+     transform_vpn_connection_create_output, transform_geographic_hierachy_table_output,
+     transform_service_community_table_output, transform_waf_rule_sets_table_output,
+     transform_network_usage_list, transform_network_usage_table)
+
+
+custom_path = 'azure.cli.command_modules.network.custom#'
+
+# Application gateways
+ag_path = 'azure.mgmt.network.operations.application_gateways_operations#ApplicationGatewaysOperations.'
+cli_command(__name__, 'network application-gateway create', custom_path + 'create_application_gateway', transform=DeploymentOutputLongRunningOperation('Starting network application-gateway create'), no_wait_param='no_wait')
+cli_command(__name__, 'network application-gateway delete', ag_path + 'delete', cf_application_gateways, no_wait_param='raw')
+cli_command(__name__, 'network application-gateway show', ag_path + 'get', cf_application_gateways, exception_handler=empty_on_404)
+cli_command(__name__, 'network application-gateway list', custom_path + 'list_application_gateways')
+cli_command(__name__, 'network application-gateway start', ag_path + 'start', cf_application_gateways)
+cli_command(__name__, 'network application-gateway stop', ag_path + 'stop', cf_application_gateways)
+
+if supported_api_version(ResourceType.MGMT_NETWORK, min_api='2016-09-01'):
+    cli_command(__name__, 'network application-gateway show-backend-health', ag_path + 'backend_health', cf_application_gateways)
+
+cli_generic_update_command(__name__, 'network application-gateway update',
+                           ag_path + 'get', ag_path + 'create_or_update', cf_application_gateways,
+                           no_wait_param='raw', custom_function_op=custom_path + 'update_application_gateway')
+cli_generic_wait_command(__name__, 'network application-gateway wait', ag_path + 'get', cf_application_gateways)
+
 
 property_map = {
+    'authentication_certificates': 'auth-cert',
     'ssl_certificates': 'ssl-cert',
     'frontend_ip_configurations': 'frontend-ip',
     'frontend_ports': 'frontend-port',
@@ -138,66 +66,92 @@ property_map = {
     'http_listeners': 'http-listener',
     'request_routing_rules': 'rule',
     'probes': 'probe',
-    'url_path_maps': 'url-path-map'
+    'url_path_maps': 'url-path-map',
 }
-for subresource, alias in property_map.items():
-    cli_command('network application-gateway {} list'.format(alias), list_network_resource_property('application_gateways', subresource))
-    cli_command('network application-gateway {} show'.format(alias), get_network_resource_property_entry('application_gateways', subresource))
-    cli_command('network application-gateway {} delete'.format(alias), delete_network_resource_property_entry('application_gateways', subresource))
 
-cli_command('network application-gateway address-pool create', create_ag_address_pool)
-cli_command('network application-gateway frontend-ip create', create_ag_frontend_ip)
-cli_command('network application-gateway frontend-port create', create_ag_frontend_port)
-cli_command('network application-gateway http-listener create', create_ag_http_listener)
-cli_command('network application-gateway http-settings create', create_ag_http_settings)
-cli_command('network application-gateway probe create', create_ag_probe)
-cli_command('network application-gateway rule create', create_ag_rule)
-cli_command('network application-gateway ssl-cert create', create_ag_ssl_cert)
-cli_command('network application-gateway url-path-map create', create_ag_url_path_map)
-cli_command('network application-gateway url-path-map rule create', create_ag_url_path_map_rule)
-cli_command('network application-gateway url-path-map rule delete', delete_ag_url_path_map_rule)
+
+def _make_singular(value):
+    try:
+        if value.endswith('ies'):
+            value = value[:-3] + 'y'
+        elif value.endswith('s'):
+            value = value[:-1]
+        return value
+    except AttributeError:
+        return value
+
+
+for subresource, alias in property_map.items():
+    cli_command(__name__, 'network application-gateway {} list'.format(alias), 'azure.cli.command_modules.network._util#{}'.format(list_network_resource_property('application_gateways', subresource)))
+    cli_command(__name__, 'network application-gateway {} show'.format(alias), 'azure.cli.command_modules.network._util#{}'.format(get_network_resource_property_entry('application_gateways', subresource)), exception_handler=empty_on_404)
+    cli_command(__name__, 'network application-gateway {} delete'.format(alias), 'azure.cli.command_modules.network._util#{}'.format(delete_network_resource_property_entry('application_gateways', subresource)), no_wait_param='no_wait')
+    cli_command(__name__, 'network application-gateway {} create'.format(alias), custom_path + 'create_ag_{}'.format(_make_singular(subresource)), no_wait_param='no_wait')
+    cli_generic_update_command(__name__, 'network application-gateway {} update'.format(alias),
+                               ag_path + 'get', ag_path + 'create_or_update', cf_application_gateways,
+                               no_wait_param='raw',
+                               custom_function_op=custom_path + 'update_ag_{}'.format(_make_singular(subresource)),
+                               child_collection_prop_name=subresource)
+
+cli_command(__name__, 'network application-gateway ssl-policy set', custom_path + 'set_ag_ssl_policy', no_wait_param='no_wait')
+cli_command(__name__, 'network application-gateway ssl-policy show', custom_path + 'show_ag_ssl_policy', exception_handler=empty_on_404)
+
+cli_command(__name__, 'network application-gateway url-path-map rule create', custom_path + 'create_ag_url_path_map_rule')
+cli_command(__name__, 'network application-gateway url-path-map rule delete', custom_path + 'delete_ag_url_path_map_rule')
+
+if supported_api_version(ResourceType.MGMT_NETWORK, min_api='2017-03-01'):
+    cli_command(__name__, 'network application-gateway waf-config set', custom_path + 'set_ag_waf_config_2017_03_01', no_wait_param='no_wait')
+else:
+    cli_command(__name__, 'network application-gateway waf-config set', custom_path + 'set_ag_waf_config_2016_09_01', no_wait_param='no_wait')
+
+cli_command(__name__, 'network application-gateway waf-config show', custom_path + 'show_ag_waf_config', exception_handler=empty_on_404)
+
+if supported_api_version(ResourceType.MGMT_NETWORK, min_api='2017-03-01'):
+    cli_command(__name__, 'network application-gateway waf-config list-rule-sets', custom_path + 'list_ag_waf_rule_sets', cf_application_gateways, table_transformer=transform_waf_rule_sets_table_output)
 
 # ExpressRouteCircuitAuthorizationsOperations
-factory = lambda _: _network_client_factory().express_route_circuit_authorizations
-cli_command('network express-route auth delete', ExpressRouteCircuitAuthorizationsOperations.delete, factory)
-cli_command('network express-route auth show', ExpressRouteCircuitAuthorizationsOperations.get, factory)
-cli_command('network express-route auth list', ExpressRouteCircuitAuthorizationsOperations.list, factory)
-cli_command('network express-route auth create', ExpressRouteCircuitAuthorizationsOperations.create_or_update, factory)
+erca_path = 'azure.mgmt.network.operations.express_route_circuit_authorizations_operations#ExpressRouteCircuitAuthorizationsOperations.'
+cli_command(__name__, 'network express-route auth delete', erca_path + 'delete', cf_express_route_circuit_authorizations)
+cli_command(__name__, 'network express-route auth show', erca_path + 'get', cf_express_route_circuit_authorizations, exception_handler=empty_on_404)
+cli_command(__name__, 'network express-route auth list', erca_path + 'list', cf_express_route_circuit_authorizations)
+cli_command(__name__, 'network express-route auth create', erca_path + 'create_or_update', cf_express_route_circuit_authorizations)
 
 # ExpressRouteCircuitPeeringsOperations
-factory = lambda _: _network_client_factory().express_route_circuit_peerings
-cli_command('network express-route peering delete', ExpressRouteCircuitPeeringsOperations.delete, factory)
-cli_command('network express-route peering show', ExpressRouteCircuitPeeringsOperations.get, factory)
-cli_command('network express-route peering list', ExpressRouteCircuitPeeringsOperations.list, factory)
-cli_generic_update_command('network express-route peering update', ExpressRouteCircuitPeeringsOperations.get, ExpressRouteCircuitPeeringsOperations.create_or_update, factory, setter_arg_name='peering_parameters')
-cli_command('network express-route peering create', create_express_route_peering, factory)
+ercp_path = 'azure.mgmt.network.operations.express_route_circuit_peerings_operations#ExpressRouteCircuitPeeringsOperations.'
+cli_command(__name__, 'network express-route peering delete', ercp_path + 'delete', cf_express_route_circuit_peerings)
+cli_command(__name__, 'network express-route peering show', ercp_path + 'get', cf_express_route_circuit_peerings, exception_handler=empty_on_404)
+cli_command(__name__, 'network express-route peering list', ercp_path + 'list', cf_express_route_circuit_peerings)
+cli_generic_update_command(__name__, 'network express-route peering update',
+                           ercp_path + 'get', ercp_path + 'create_or_update', cf_express_route_circuit_peerings,
+                           setter_arg_name='peering_parameters', custom_function_op=custom_path + 'update_express_route_peering')
+cli_command(__name__, 'network express-route peering create', custom_path + 'create_express_route_peering', cf_express_route_circuit_peerings)
 
-# ExpressRouteCircuitsOperations
-factory = lambda _: _network_client_factory().express_route_circuits
-cli_command('network express-route delete', ExpressRouteCircuitsOperations.delete, factory)
-cli_command('network express-route show', ExpressRouteCircuitsOperations.get, factory)
-cli_command('network express-route get-stats', ExpressRouteCircuitsOperations.get_stats, factory)
-cli_command('network express-route list-arp-tables', ExpressRouteCircuitsOperations.list_arp_table, factory)
-cli_command('network express-route list-route-tables', ExpressRouteCircuitsOperations.list_routes_table, factory)
-cli_command('network express-route list', list_express_route_circuits)
-cli_generic_update_command('network express-route update', ExpressRouteCircuitsOperations.get, ExpressRouteCircuitsOperations.create_or_update, factory)
+if supported_api_version(ResourceType.MGMT_NETWORK, min_api='2016-09-01'):
+    # ExpressRouteCircuitsOperations
+    erco_path = 'azure.mgmt.network.operations.express_route_circuits_operations#ExpressRouteCircuitsOperations.'
+    cli_command(__name__, 'network express-route delete', erco_path + 'delete', cf_express_route_circuits, no_wait_param='raw')
+    cli_command(__name__, 'network express-route show', erco_path + 'get', cf_express_route_circuits, exception_handler=empty_on_404)
+    cli_command(__name__, 'network express-route get-stats', erco_path + 'get_stats', cf_express_route_circuits)
+    cli_command(__name__, 'network express-route list-arp-tables', erco_path + 'list_arp_table', cf_express_route_circuits)
+    cli_command(__name__, 'network express-route list-route-tables', erco_path + 'list_routes_table', cf_express_route_circuits)
+    cli_command(__name__, 'network express-route create', custom_path + 'create_express_route', no_wait_param='no_wait')
+    cli_command(__name__, 'network express-route list', custom_path + 'list_express_route_circuits')
+    cli_generic_update_command(__name__, 'network express-route update',
+                               erco_path + 'get', erco_path + 'create_or_update', cf_express_route_circuits,
+                               custom_function_op=custom_path + 'update_express_route', no_wait_param='raw')
+    cli_generic_wait_command(__name__, 'network express-route wait', erco_path + 'get', cf_express_route_circuits)
 
-factory = lambda _: get_mgmt_service_client(ExpressRouteCircuitClient).express_route_circuit
-cli_command('network express-route create', ExpressRouteCircuitOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network express-route create'))
-
-# ExpressRouteServiceProvidersOperations
-factory = lambda _: _network_client_factory().express_route_service_providers
-cli_command('network express-route list-service-providers', ExpressRouteServiceProvidersOperations.list, factory)
+    # ExpressRouteServiceProvidersOperations
+    ersp_path = 'azure.mgmt.network.operations.express_route_service_providers_operations#ExpressRouteServiceProvidersOperations.'
+    cli_command(__name__, 'network express-route list-service-providers', ersp_path + 'list', cf_express_route_service_providers)
 
 # LoadBalancersOperations
-factory = lambda _: _network_client_factory().load_balancers
-cli_command('network lb delete', LoadBalancersOperations.delete, factory)
-cli_command('network lb show', LoadBalancersOperations.get, factory)
-cli_command('network lb list', list_lbs)
-cli_generic_update_command('network lb update', LoadBalancersOperations.get, LoadBalancersOperations.create_or_update, factory)
+lb_path = 'azure.mgmt.network.operations.load_balancers_operations#LoadBalancersOperations.'
+cli_command(__name__, 'network lb create', custom_path + 'create_load_balancer', transform=DeploymentOutputLongRunningOperation('Starting network lb create'), no_wait_param='no_wait')
+cli_command(__name__, 'network lb delete', lb_path + 'delete', cf_load_balancers)
+cli_command(__name__, 'network lb show', lb_path + 'get', cf_load_balancers, exception_handler=empty_on_404)
+cli_command(__name__, 'network lb list', custom_path + 'list_lbs')
+cli_generic_update_command(__name__, 'network lb update', lb_path + 'get', lb_path + 'create_or_update', cf_load_balancers)
 
-factory = lambda _: get_mgmt_service_client(LBClient).lb
-cli_command('network lb create', LbOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network lb create'))
 
 property_map = {
     'frontend_ip_configurations': 'frontend-ip',
@@ -208,219 +162,321 @@ property_map = {
     'probes': 'probe'
 }
 for subresource, alias in property_map.items():
-    cli_command('network lb {} list'.format(alias), list_network_resource_property('load_balancers', subresource))
-    cli_command('network lb {} show'.format(alias), get_network_resource_property_entry('load_balancers', subresource))
-    cli_command('network lb {} delete'.format(alias), delete_network_resource_property_entry('load_balancers', subresource))
+    cli_command(__name__, 'network lb {} list'.format(alias), 'azure.cli.command_modules.network._util#{}'.format(list_network_resource_property('load_balancers', subresource)))
+    cli_command(__name__, 'network lb {} show'.format(alias), 'azure.cli.command_modules.network._util#{}'.format(get_network_resource_property_entry('load_balancers', subresource)), exception_handler=empty_on_404)
+    cli_command(__name__, 'network lb {} delete'.format(alias), 'azure.cli.command_modules.network._util#{}'.format(delete_network_resource_property_entry('load_balancers', subresource)))
 
-cli_command('network lb frontend-ip create', create_lb_frontend_ip_configuration)
-cli_command('network lb inbound-nat-rule create', create_lb_inbound_nat_rule)
-cli_command('network lb inbound-nat-pool create', create_lb_inbound_nat_pool)
-cli_command('network lb address-pool create', create_lb_backend_address_pool)
-cli_command('network lb rule create', create_lb_rule)
-cli_command('network lb probe create', create_lb_probe)
+cli_command(__name__, 'network lb frontend-ip create', custom_path + 'create_lb_frontend_ip_configuration')
+cli_command(__name__, 'network lb inbound-nat-rule create', custom_path + 'create_lb_inbound_nat_rule')
+cli_command(__name__, 'network lb inbound-nat-pool create', custom_path + 'create_lb_inbound_nat_pool')
+cli_command(__name__, 'network lb address-pool create', custom_path + 'create_lb_backend_address_pool')
+cli_command(__name__, 'network lb rule create', custom_path + 'create_lb_rule')
+cli_command(__name__, 'network lb probe create', custom_path + 'create_lb_probe')
 
-factory = lambda _: _network_client_factory().load_balancers
-cli_generic_update_command('network lb frontend-ip update', LoadBalancersOperations.get, LoadBalancersOperations.create_or_update, factory, child_collection_prop_name='frontend_ip_configurations', custom_function=set_lb_frontend_ip_configuration)
-cli_generic_update_command('network lb inbound-nat-rule update', LoadBalancersOperations.get, LoadBalancersOperations.create_or_update, factory, child_collection_prop_name='inbound_nat_rules', custom_function=set_lb_inbound_nat_rule)
-cli_generic_update_command('network lb inbound-nat-pool update', LoadBalancersOperations.get, LoadBalancersOperations.create_or_update, factory, child_collection_prop_name='inbound_nat_pools', custom_function=set_lb_inbound_nat_pool)
-cli_generic_update_command('network lb rule update', LoadBalancersOperations.get, LoadBalancersOperations.create_or_update, factory, child_collection_prop_name='load_balancing_rules', custom_function=set_lb_rule)
-cli_generic_update_command('network lb probe update', LoadBalancersOperations.get, LoadBalancersOperations.create_or_update, factory, child_collection_prop_name='probes', custom_function=set_lb_probe)
+cli_generic_update_command(__name__, 'network lb frontend-ip update',
+                           lb_path + 'get', lb_path + 'create_or_update', cf_load_balancers,
+                           child_collection_prop_name='frontend_ip_configurations',
+                           custom_function_op=custom_path + 'set_lb_frontend_ip_configuration')
+cli_generic_update_command(__name__, 'network lb inbound-nat-rule update',
+                           lb_path + 'get', lb_path + 'create_or_update', cf_load_balancers,
+                           child_collection_prop_name='inbound_nat_rules',
+                           custom_function_op=custom_path + 'set_lb_inbound_nat_rule')
+cli_generic_update_command(__name__, 'network lb inbound-nat-pool update',
+                           lb_path + 'get', lb_path + 'create_or_update', cf_load_balancers,
+                           child_collection_prop_name='inbound_nat_pools',
+                           custom_function_op=custom_path + 'set_lb_inbound_nat_pool')
+cli_generic_update_command(__name__, 'network lb rule update',
+                           lb_path + 'get', lb_path + 'create_or_update', cf_load_balancers,
+                           child_collection_prop_name='load_balancing_rules',
+                           custom_function_op=custom_path + 'set_lb_rule')
+cli_generic_update_command(__name__, 'network lb probe update',
+                           lb_path + 'get', lb_path + 'create_or_update', cf_load_balancers,
+                           child_collection_prop_name='probes',
+                           custom_function_op=custom_path + 'set_lb_probe')
 
 # LocalNetworkGatewaysOperations
-factory = lambda _: _network_client_factory().local_network_gateways
-cli_command('network local-gateway delete', LocalNetworkGatewaysOperations.delete, factory)
-cli_command('network local-gateway show', LocalNetworkGatewaysOperations.get, factory)
-cli_command('network local-gateway list', LocalNetworkGatewaysOperations.list, factory)
-cli_generic_update_command('network local-gateway update', LocalNetworkGatewaysOperations.get, LocalNetworkGatewaysOperations.create_or_update, factory)
-
-factory = lambda _: get_mgmt_service_client(LocalGatewayClient).local_gateway
-cli_command('network local-gateway create', LocalGatewayOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network local-gateway create'))
+lgw_path = 'azure.mgmt.network.operations.local_network_gateways_operations#LocalNetworkGatewaysOperations.'
+cli_command(__name__, 'network local-gateway delete', lgw_path + 'delete', cf_local_network_gateways, no_wait_param='raw')
+cli_command(__name__, 'network local-gateway show', lgw_path + 'get', cf_local_network_gateways, exception_handler=empty_on_404)
+cli_command(__name__, 'network local-gateway list', lgw_path + 'list', cf_local_network_gateways, table_transformer=transform_local_gateway_table_output)
+cli_command(__name__, 'network local-gateway create', custom_path + 'create_local_gateway', no_wait_param='no_wait')
+cli_generic_update_command(__name__, 'network local-gateway update',
+                           lgw_path + 'get', lgw_path + 'create_or_update', cf_local_network_gateways,
+                           custom_function_op=custom_path + 'update_local_gateway', no_wait_param='raw')
+cli_generic_wait_command(__name__, 'network local-gateway wait', lgw_path + 'get', cf_local_network_gateways)
 
 # NetworkInterfacesOperations
-factory = lambda _: get_mgmt_service_client(NicClient).nic
-cli_command('network nic create', NicOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network nic create'))
-
-factory = lambda _: _network_client_factory().network_interfaces
-cli_command('network nic delete', NetworkInterfacesOperations.delete, factory)
-cli_command('network nic show', NetworkInterfacesOperations.get, factory)
-cli_command('network nic list', list_nics)
-cli_generic_update_command('network nic update', NetworkInterfacesOperations.get, NetworkInterfacesOperations.create_or_update, factory, custom_function=set_nic)
-cli_command('network nic show-effective-route-table', NetworkInterfacesOperations.get_effective_route_table, factory)
-cli_command('network nic list-effective-nsg', NetworkInterfacesOperations.list_effective_network_security_groups, factory)
+nic_path = 'azure.mgmt.network.operations.network_interfaces_operations#NetworkInterfacesOperations.'
+cli_command(__name__, 'network nic create', custom_path + 'create_nic', transform=transform_nic_create_output)
+cli_command(__name__, 'network nic delete', nic_path + 'delete', cf_network_interfaces)
+cli_command(__name__, 'network nic show', nic_path + 'get', cf_network_interfaces, exception_handler=empty_on_404)
+cli_command(__name__, 'network nic list', custom_path + 'list_nics')
+cli_generic_update_command(__name__, 'network nic update',
+                           nic_path + 'get', nic_path + 'create_or_update', cf_network_interfaces,
+                           custom_function_op=custom_path + 'update_nic')
+if supported_api_version(ResourceType.MGMT_NETWORK, min_api='2016-09-01'):
+    cli_command(__name__, 'network nic show-effective-route-table', nic_path + 'get_effective_route_table', cf_network_interfaces)
+    cli_command(__name__, 'network nic list-effective-nsg', nic_path + 'list_effective_network_security_groups', cf_network_interfaces)
 
 resource = 'network_interfaces'
 subresource = 'ip_configurations'
-cli_command('network nic ip-config create', create_nic_ip_config)
-cli_generic_update_command('network nic ip-config update', NetworkInterfacesOperations.get, NetworkInterfacesOperations.create_or_update, factory, child_collection_prop_name='ip_configurations', child_arg_name='ip_config_name', custom_function=set_nic_ip_config)
-cli_command('network nic ip-config list', list_network_resource_property(resource, subresource))
-cli_command('network nic ip-config show', get_network_resource_property_entry(resource, subresource))
-cli_command('network nic ip-config delete', delete_network_resource_property_entry(resource, subresource))
-cli_command('network nic ip-config address-pool add', add_nic_ip_config_address_pool)
-cli_command('network nic ip-config address-pool remove', remove_nic_ip_config_address_pool)
-cli_command('network nic ip-config inbound-nat-rule add', add_nic_ip_config_inbound_nat_rule)
-cli_command('network nic ip-config inbound-nat-rule remove', remove_nic_ip_config_inbound_nat_rule)
+cli_command(__name__, 'network nic ip-config create', custom_path + 'create_nic_ip_config')
+cli_generic_update_command(__name__, 'network nic ip-config update',
+                           nic_path + 'get', nic_path + 'create_or_update', cf_network_interfaces,
+                           child_collection_prop_name='ip_configurations',
+                           child_arg_name='ip_config_name',
+                           custom_function_op=custom_path + 'set_nic_ip_config')
+cli_command(__name__, 'network nic ip-config list', 'azure.cli.command_modules.network._util#{}'.format(list_network_resource_property(resource, subresource)))
+cli_command(__name__, 'network nic ip-config show', 'azure.cli.command_modules.network._util#{}'.format(get_network_resource_property_entry(resource, subresource)), exception_handler=empty_on_404)
+cli_command(__name__, 'network nic ip-config delete', 'azure.cli.command_modules.network._util#{}'.format(delete_network_resource_property_entry(resource, subresource)))
+cli_command(__name__, 'network nic ip-config address-pool add', custom_path + 'add_nic_ip_config_address_pool')
+cli_command(__name__, 'network nic ip-config address-pool remove', custom_path + 'remove_nic_ip_config_address_pool')
+cli_command(__name__, 'network nic ip-config inbound-nat-rule add', custom_path + 'add_nic_ip_config_inbound_nat_rule')
+cli_command(__name__, 'network nic ip-config inbound-nat-rule remove', custom_path + 'remove_nic_ip_config_inbound_nat_rule')
 
 # NetworkSecurityGroupsOperations
-factory = lambda _: _network_client_factory().network_security_groups
-cli_command('network nsg delete', NetworkSecurityGroupsOperations.delete, factory)
-cli_command('network nsg show', NetworkSecurityGroupsOperations.get, factory)
-cli_command('network nsg list', list_nsgs)
-cli_generic_update_command('network nsg update', NetworkSecurityGroupsOperations.get, NetworkSecurityGroupsOperations.create_or_update, factory)
+nsg_path = 'azure.mgmt.network.operations.network_security_groups_operations#NetworkSecurityGroupsOperations.'
+cli_command(__name__, 'network nsg delete', nsg_path + 'delete', cf_network_security_groups)
+cli_command(__name__, 'network nsg show', nsg_path + 'get', cf_network_security_groups, exception_handler=empty_on_404)
+cli_command(__name__, 'network nsg list', custom_path + 'list_nsgs')
+cli_command(__name__, 'network nsg create', custom_path + 'create_nsg', transform=transform_nsg_create_output)
+cli_generic_update_command(__name__, 'network nsg update', nsg_path + 'get', nsg_path + 'create_or_update', cf_network_security_groups)
 
-factory = lambda _: get_mgmt_service_client(NSGClient).nsg
-cli_command('network nsg create', NsgOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network nsg create'))
+
+# NetworkWatcherOperations
+nw_path = 'azure.mgmt.network.operations.network_watchers_operations#NetworkWatchersOperations.'
+nw_pc_path = 'azure.mgmt.network.operations.packet_captures_operations#PacketCapturesOperations.'
+cli_command(__name__, 'network watcher configure', custom_path + 'configure_network_watcher', cf_network_watcher)
+cli_command(__name__, 'network watcher list', nw_path + 'list_all', cf_network_watcher)
+
+cli_command(__name__, 'network watcher test-ip-flow', custom_path + 'check_nw_ip_flow', cf_network_watcher)
+cli_command(__name__, 'network watcher test-connectivity', custom_path + 'check_nw_connectivity', cf_network_watcher)
+cli_command(__name__, 'network watcher show-next-hop', custom_path + 'show_nw_next_hop', cf_network_watcher)
+cli_command(__name__, 'network watcher show-security-group-view', custom_path + 'show_nw_security_view', cf_network_watcher)
+cli_command(__name__, 'network watcher show-topology', nw_path + 'get_topology', cf_network_watcher)
+
+cli_command(__name__, 'network watcher packet-capture create', custom_path + 'create_nw_packet_capture', cf_packet_capture)
+cli_command(__name__, 'network watcher packet-capture show', nw_pc_path + 'get', cf_packet_capture)
+cli_command(__name__, 'network watcher packet-capture show-status', nw_pc_path + 'get_status', cf_packet_capture)
+cli_command(__name__, 'network watcher packet-capture delete', nw_pc_path + 'delete', cf_packet_capture)
+cli_command(__name__, 'network watcher packet-capture stop', nw_pc_path + 'stop', cf_packet_capture)
+cli_command(__name__, 'network watcher packet-capture list', nw_pc_path + 'list', cf_packet_capture)
+
+cli_command(__name__, 'network watcher flow-log configure', custom_path + 'set_nsg_flow_logging', cf_network_watcher)
+cli_command(__name__, 'network watcher flow-log show', custom_path + 'show_nsg_flow_logging', cf_network_watcher)
+
+cli_command(__name__, 'network watcher troubleshooting start', custom_path + 'start_nw_troubleshooting', cf_network_watcher, no_wait_param='no_wait')
+cli_command(__name__, 'network watcher troubleshooting show', custom_path + 'show_nw_troubleshooting_result', cf_network_watcher)
+
+# NetworkWatcherOperations
+nw_path = 'azure.mgmt.network.operations.network_watchers_operations#NetworkWatchersOperations.'
+nw_pc_path = 'azure.mgmt.network.operations.packet_captures_operations#PacketCapturesOperations.'
+cli_command(__name__, 'network watcher configure', custom_path + 'configure_network_watcher', cf_network_watcher)
+cli_command(__name__, 'network watcher list', nw_path + 'list_all', cf_network_watcher)
+
+cli_command(__name__, 'network watcher test-ip-flow', custom_path + 'check_nw_ip_flow', cf_network_watcher)
+cli_command(__name__, 'network watcher show-next-hop', custom_path + 'show_nw_next_hop', cf_network_watcher)
+cli_command(__name__, 'network watcher show-security-group-view', custom_path + 'show_nw_security_view', cf_network_watcher)
+cli_command(__name__, 'network watcher show-topology', nw_path + 'get_topology', cf_network_watcher)
+
+cli_command(__name__, 'network watcher packet-capture create', custom_path + 'create_nw_packet_capture', cf_packet_capture)
+cli_command(__name__, 'network watcher packet-capture show', nw_pc_path + 'get', cf_packet_capture)
+cli_command(__name__, 'network watcher packet-capture show-status', nw_pc_path + 'get_status', cf_packet_capture)
+cli_command(__name__, 'network watcher packet-capture delete', nw_pc_path + 'delete', cf_packet_capture)
+cli_command(__name__, 'network watcher packet-capture stop', nw_pc_path + 'stop', cf_packet_capture)
+cli_command(__name__, 'network watcher packet-capture list', nw_pc_path + 'list', cf_packet_capture)
+
+cli_command(__name__, 'network watcher flow-log configure', custom_path + 'set_nsg_flow_logging', cf_network_watcher)
+cli_command(__name__, 'network watcher flow-log show', custom_path + 'show_nsg_flow_logging', cf_network_watcher)
+
+cli_command(__name__, 'network watcher troubleshooting start', custom_path + 'start_nw_troubleshooting', cf_network_watcher, no_wait_param='no_wait')
+cli_command(__name__, 'network watcher troubleshooting show', custom_path + 'show_nw_troubleshooting_result', cf_network_watcher)
 
 # PublicIPAddressesOperations
-factory = lambda _: _network_client_factory().public_ip_addresses
-cli_command('network public-ip delete', PublicIPAddressesOperations.delete, factory)
-cli_command('network public-ip show', PublicIPAddressesOperations.get, factory)
-cli_command('network public-ip list', list_public_ips)
-cli_generic_update_command('network public-ip update', PublicIPAddressesOperations.get, PublicIPAddressesOperations.create_or_update, factory)
-
-factory = lambda _: get_mgmt_service_client(PublicIPClient).public_ip
-cli_command('network public-ip create', PublicIpOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network public-ip create'))
+public_ip_path = 'azure.mgmt.network.operations.public_ip_addresses_operations#PublicIPAddressesOperations.'
+cli_command(__name__, 'network public-ip delete', public_ip_path + 'delete', cf_public_ip_addresses)
+cli_command(__name__, 'network public-ip show', public_ip_path + 'get', cf_public_ip_addresses, exception_handler=empty_on_404)
+cli_command(__name__, 'network public-ip list', custom_path + 'list_public_ips')
+cli_command(__name__, 'network public-ip create', custom_path + 'create_public_ip', transform=transform_public_ip_create_output)
+cli_generic_update_command(__name__, 'network public-ip update', public_ip_path + 'get', public_ip_path + 'create_or_update', cf_public_ip_addresses, custom_function_op=custom_path + 'update_public_ip')
 
 # RouteTablesOperations
-factory = lambda _: _network_client_factory().route_tables
-cli_command('network route-table delete', RouteTablesOperations.delete, factory)
-cli_command('network route-table show', RouteTablesOperations.get, factory)
-cli_command('network route-table list', list_route_tables)
-cli_generic_update_command('network route-table update', RouteTablesOperations.get, RouteTablesOperations.create_or_update, factory)
-
-factory = lambda _: get_mgmt_service_client(RouteTableClient).route_table
-cli_command('network route-table create', RouteTableOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network route-table create'))
+rt_path = 'azure.mgmt.network.operations.route_tables_operations#RouteTablesOperations.'
+cli_command(__name__, 'network route-table create', rt_path + 'create_or_update', cf_route_tables)
+cli_command(__name__, 'network route-table delete', rt_path + 'delete', cf_route_tables)
+cli_command(__name__, 'network route-table show', rt_path + 'get', cf_route_tables, exception_handler=empty_on_404)
+cli_command(__name__, 'network route-table list', custom_path + 'list_route_tables')
+cli_generic_update_command(__name__, 'network route-table update', rt_path + 'get', rt_path + 'create_or_update', cf_route_tables, custom_function_op=custom_path + 'update_route_table')
 
 # RoutesOperations
-factory = lambda _: _network_client_factory().routes
-cli_command('network route-table route delete', RoutesOperations.delete, factory)
-cli_command('network route-table route show', RoutesOperations.get, factory)
-cli_command('network route-table route list', RoutesOperations.list, factory)
-cli_generic_update_command('network route-table route update', RoutesOperations.get, RoutesOperations.create_or_update, factory)
-cli_command('network route-table route create', create_route)
+rtr_path = 'azure.mgmt.network.operations.routes_operations#RoutesOperations.'
+cli_command(__name__, 'network route-table route delete', rtr_path + 'delete', cf_routes)
+cli_command(__name__, 'network route-table route show', rtr_path + 'get', cf_routes, exception_handler=empty_on_404)
+cli_command(__name__, 'network route-table route list', rtr_path + 'list', cf_routes)
+cli_generic_update_command(__name__, 'network route-table route update',
+                           rtr_path + 'get', rtr_path + 'create_or_update', cf_routes,
+                           custom_function_op=custom_path + 'update_route', setter_arg_name='route_parameters')
+cli_command(__name__, 'network route-table route create', custom_path + 'create_route')
+
+if supported_api_version(ResourceType.MGMT_NETWORK, min_api='2016-12-01'):
+    # RouteFiltersOperations
+    rf_path = 'azure.mgmt.network.operations#RouteFiltersOperations.'
+    cli_command(__name__, 'network route-filter list', custom_path + 'list_route_filters', cf_route_filters)
+    cli_command(__name__, 'network route-filter show', rf_path + 'get', cf_route_filters)
+    cli_command(__name__, 'network route-filter create', custom_path + 'create_route_filter', cf_route_filters)
+    cli_command(__name__, 'network route-filter delete', rf_path + 'delete', cf_route_filters)
+    cli_generic_update_command(__name__, 'network route-filter update', rf_path + 'get', rf_path + 'create_or_update', cf_route_filters)
+
+    # RouteFilterRulesOperations
+    rfr_path = 'azure.mgmt.network.operations#RouteFilterRulesOperations.'
+    cli_command(__name__, 'network route-filter rule list', rfr_path + 'list_by_route_filter', cf_route_filter_rules)
+    cli_command(__name__, 'network route-filter rule show', rfr_path + 'get', cf_route_filter_rules)
+    cli_command(__name__, 'network route-filter rule create', custom_path + 'create_route_filter_rule', cf_route_filter_rules)
+    cli_command(__name__, 'network route-filter rule delete', rfr_path + 'delete', cf_route_filter_rules)
+    cli_generic_update_command(__name__, 'network route-filter rule update', rfr_path + 'get', rfr_path + 'create_or_update', cf_route_filter_rules)
+
+    # ServiceCommunitiesOperations
+    sc_path = 'azure.mgmt.network.operations#BgpServiceCommunitiesOperations.'
+    cli_command(__name__, 'network route-filter rule list-service-communities', sc_path + 'list', cf_service_community, table_transformer=transform_service_community_table_output)
 
 # SecurityRulesOperations
-factory = lambda _: _network_client_factory().security_rules
-cli_command('network nsg rule delete', SecurityRulesOperations.delete, factory)
-cli_command('network nsg rule show', SecurityRulesOperations.get, factory)
-cli_command('network nsg rule list', SecurityRulesOperations.list, factory)
-cli_command('network nsg rule create', create_nsg_rule)
-cli_generic_update_command('network nsg rule update', SecurityRulesOperations.get, SecurityRulesOperations.create_or_update, factory, setter_arg_name='security_rule_parameters', custom_function=update_nsg_rule)
+sr_path = 'azure.mgmt.network.operations.security_rules_operations#SecurityRulesOperations.'
+cli_command(__name__, 'network nsg rule delete', sr_path + 'delete', cf_security_rules)
+cli_command(__name__, 'network nsg rule show', sr_path + 'get', cf_security_rules, exception_handler=empty_on_404)
+cli_command(__name__, 'network nsg rule list', sr_path + 'list', cf_security_rules)
+cli_command(__name__, 'network nsg rule create', custom_path + 'create_nsg_rule')
+cli_generic_update_command(__name__, 'network nsg rule update',
+                           sr_path + 'get', sr_path + 'create_or_update', cf_security_rules,
+                           setter_arg_name='security_rule_parameters', custom_function_op=custom_path + 'update_nsg_rule')
 
 # SubnetsOperations
-factory = lambda _: _network_client_factory().subnets
-cli_command('network vnet subnet delete', SubnetsOperations.delete, factory)
-cli_command('network vnet subnet show', SubnetsOperations.get, factory)
-cli_command('network vnet subnet list', SubnetsOperations.list, factory)
-cli_command('network vnet subnet create', create_subnet)
-cli_generic_update_command('network vnet subnet update', SubnetsOperations.get, SubnetsOperations.create_or_update, factory, setter_arg_name='subnet_parameters', custom_function=update_subnet)
+subnet_path = 'azure.mgmt.network.operations.subnets_operations#SubnetsOperations.'
+cli_command(__name__, 'network vnet subnet delete', subnet_path + 'delete', cf_subnets)
+cli_command(__name__, 'network vnet subnet show', subnet_path + 'get', cf_subnets, exception_handler=empty_on_404)
+cli_command(__name__, 'network vnet subnet list', subnet_path + 'list', cf_subnets)
+cli_command(__name__, 'network vnet subnet create', custom_path + 'create_subnet')
+cli_generic_update_command(__name__, 'network vnet subnet update',
+                           subnet_path + 'get', subnet_path + 'create_or_update', cf_subnets,
+                           setter_arg_name='subnet_parameters', custom_function_op=custom_path + 'update_subnet')
 
 # Usages operations
-factory = lambda _: _network_client_factory().usages
-cli_command('network list-usages', UsagesOperations.list, factory)
+usage_path = 'azure.mgmt.network.operations.usages_operations#UsagesOperations.'
+cli_command(__name__, 'network list-usages', usage_path + 'list', cf_usages, transform=transform_network_usage_list, table_transformer=transform_network_usage_table)
 
-factory = lambda _: _network_client_factory().virtual_network_gateway_connections
 # VirtualNetworkGatewayConnectionsOperations
-cli_command('network vpn-connection delete', VirtualNetworkGatewayConnectionsOperations.delete, factory)
-cli_command('network vpn-connection show', VirtualNetworkGatewayConnectionsOperations.get, factory)
-cli_command('network vpn-connection list', VirtualNetworkGatewayConnectionsOperations.list, factory)
-cli_generic_update_command('network vpn-connection update', VirtualNetworkGatewayConnectionsOperations.get, VirtualNetworkGatewayConnectionsOperations.create_or_update, factory)
-cli_command('network vpn-connection shared-key show', VirtualNetworkGatewayConnectionsOperations.get_shared_key, factory)
-cli_command('network vpn-connection shared-key reset', VirtualNetworkGatewayConnectionsOperations.reset_shared_key, factory)
-cli_generic_update_command('network vpn-connection shared-key update', VirtualNetworkGatewayConnectionsOperations.get, VirtualNetworkGatewayConnectionsOperations.set_shared_key, factory)
+vpn_conn_path = 'azure.mgmt.network.operations.virtual_network_gateway_connections_operations#VirtualNetworkGatewayConnectionsOperations.'
+cli_command(__name__, 'network vpn-connection create', custom_path + 'create_vpn_connection', cf_virtual_network_gateway_connections, transform=transform_vpn_connection_create_output)
+cli_command(__name__, 'network vpn-connection delete', vpn_conn_path + 'delete', cf_virtual_network_gateway_connections)
+cli_command(__name__, 'network vpn-connection show', vpn_conn_path + 'get', cf_virtual_network_gateway_connections, exception_handler=empty_on_404, transform=transform_vpn_connection)
+cli_command(__name__, 'network vpn-connection list', vpn_conn_path + 'list', cf_virtual_network_gateway_connections, transform=transform_vpn_connection_list)
+cli_generic_update_command(__name__, 'network vpn-connection update',
+                           vpn_conn_path + 'get', vpn_conn_path + 'create_or_update', cf_virtual_network_gateway_connections,
+                           custom_function_op=custom_path + 'update_vpn_connection')
 
-factory = lambda _: get_mgmt_service_client(VpnConnectionClient).vpn_connection
-cli_command('network vpn-connection create', VpnConnectionOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network vpn-connection create'))
+cli_command(__name__, 'network vpn-connection shared-key show', vpn_conn_path + 'get_shared_key', cf_virtual_network_gateway_connections, exception_handler=empty_on_404)
+cli_command(__name__, 'network vpn-connection shared-key reset', vpn_conn_path + 'reset_shared_key', cf_virtual_network_gateway_connections)
+cli_generic_update_command(__name__, 'network vpn-connection shared-key update', vpn_conn_path + 'get', vpn_conn_path + 'set_shared_key', cf_virtual_network_gateway_connections)
+
+cli_command(__name__, 'network vpn-connection ipsec-policy add', custom_path + 'add_vpn_conn_ipsec_policy', no_wait_param='no_wait')
+cli_command(__name__, 'network vpn-connection ipsec-policy list', custom_path + 'list_vpn_conn_ipsec_policies')
+cli_command(__name__, 'network vpn-connection ipsec-policy clear', custom_path + 'clear_vpn_conn_ipsec_policies', no_wait_param='no_wait')
 
 # VirtualNetworkGatewaysOperations
-factory = lambda _: _network_client_factory().virtual_network_gateways
-cli_command('network vpn-gateway delete', VirtualNetworkGatewaysOperations.delete, factory)
-cli_command('network vpn-gateway show', VirtualNetworkGatewaysOperations.get, factory)
-cli_command('network vpn-gateway list', VirtualNetworkGatewaysOperations.list, factory)
-cli_command('network vpn-gateway reset', VirtualNetworkGatewaysOperations.reset, factory)
-cli_generic_update_command('network vpn-gateway update', VirtualNetworkGatewaysOperations.get, VirtualNetworkGatewaysOperations.create_or_update, factory,
-                           custom_function=update_network_vpn_gateway)
-cli_command('network vpn-gateway root-cert create', create_vpn_gateway_root_cert)
-cli_command('network vpn-gateway root-cert delete', delete_vpn_gateway_root_cert)
-cli_command('network vpn-gateway revoked-cert create', create_vpn_gateway_revoked_cert)
-cli_command('network vpn-gateway revoked-cert delete', delete_vpn_gateway_revoked_cert)
+vgw_path = 'azure.mgmt.network.operations.virtual_network_gateways_operations#VirtualNetworkGatewaysOperations.'
+cli_command(__name__, 'network vnet-gateway delete', vgw_path + 'delete', cf_virtual_network_gateways, no_wait_param='raw')
+cli_command(__name__, 'network vnet-gateway show', vgw_path + 'get', cf_virtual_network_gateways, exception_handler=empty_on_404)
+cli_command(__name__, 'network vnet-gateway list', vgw_path + 'list', cf_virtual_network_gateways)
+cli_command(__name__, 'network vnet-gateway reset', vgw_path + 'reset', cf_virtual_network_gateways)
+cli_command(__name__, 'network vnet-gateway create', custom_path + 'create_vnet_gateway', no_wait_param='no_wait', transform=transform_vnet_gateway_create_output)
+cli_generic_update_command(__name__, 'network vnet-gateway update',
+                           vgw_path + 'get', vgw_path + 'create_or_update', cf_virtual_network_gateways,
+                           custom_function_op=custom_path + 'update_vnet_gateway', no_wait_param='raw')
+cli_generic_wait_command(__name__, 'network vnet-gateway wait', vgw_path + 'get', cf_virtual_network_gateways)
 
-factory = lambda _: get_mgmt_service_client(VnetGatewayClient).vnet_gateway
-cli_command('network vpn-gateway create', VnetGatewayOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network vnet-gateway create'))
+cli_command(__name__, 'network vnet-gateway root-cert create', custom_path + 'create_vnet_gateway_root_cert')
+cli_command(__name__, 'network vnet-gateway root-cert delete', custom_path + 'delete_vnet_gateway_root_cert')
+cli_command(__name__, 'network vnet-gateway revoked-cert create', custom_path + 'create_vnet_gateway_revoked_cert')
+cli_command(__name__, 'network vnet-gateway revoked-cert delete', custom_path + 'delete_vnet_gateway_revoked_cert')
 
 # VirtualNetworksOperations
-factory = lambda _: _network_client_factory().virtual_networks
-cli_command('network vnet delete', VirtualNetworksOperations.delete, factory)
-cli_command('network vnet show', VirtualNetworksOperations.get, factory)
-cli_command('network vnet list', list_vnet)
-cli_command('network vnet check-ip-address', VirtualNetworksOperations.check_ip_address_availability, factory)
-cli_generic_update_command('network vnet update', VirtualNetworksOperations.get, VirtualNetworksOperations.create_or_update, factory,
-                           custom_function=update_vnet)
+vnet_path = 'azure.mgmt.network.operations.virtual_networks_operations#VirtualNetworksOperations.'
+cli_command(__name__, 'network vnet delete', vnet_path + 'delete', cf_virtual_networks)
+cli_command(__name__, 'network vnet show', vnet_path + 'get', cf_virtual_networks, exception_handler=empty_on_404)
+cli_command(__name__, 'network vnet list', custom_path + 'list_vnet')
+if supported_api_version(ResourceType.MGMT_NETWORK, min_api='2016-09-01'):
+    cli_command(__name__, 'network vnet check-ip-address', vnet_path + 'check_ip_address_availability', cf_virtual_networks)
+cli_command(__name__, 'network vnet create', custom_path + 'create_vnet', transform=transform_vnet_create_output)
+cli_generic_update_command(__name__, 'network vnet update', vnet_path + 'get', vnet_path + 'create_or_update', cf_virtual_networks, custom_function_op=custom_path + 'update_vnet')
 
-factory = lambda _: get_mgmt_service_client(VNetClient).vnet
-cli_command('network vnet create', VnetOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network vnet create'))
-
-# VNET Peering Operations
-factory = lambda _: _network_client_factory().virtual_network_peerings
-cli_command('network vnet peering create', create_vnet_peering)
-cli_command('network vnet peering show', VirtualNetworkPeeringsOperations.get, factory)
-cli_command('network vnet peering list', VirtualNetworkPeeringsOperations.list, factory)
-cli_command('network vnet peering delete', VirtualNetworkPeeringsOperations.delete, factory)
-cli_generic_update_command('network vnet peering update', VirtualNetworkPeeringsOperations.get, VirtualNetworkPeeringsOperations.create_or_update, factory, setter_arg_name='virtual_network_peering_parameters')
+if supported_api_version(ResourceType.MGMT_NETWORK, min_api='2016-09-01'):
+    # VNET Peering Operations
+    vnet_peering_path = 'azure.mgmt.network.operations.virtual_network_peerings_operations#VirtualNetworkPeeringsOperations.'
+    cli_command(__name__, 'network vnet peering create', custom_path + 'create_vnet_peering')
+    cli_command(__name__, 'network vnet peering show', vnet_peering_path + 'get', cf_virtual_network_peerings, exception_handler=empty_on_404)
+    cli_command(__name__, 'network vnet peering list', vnet_peering_path + 'list', cf_virtual_network_peerings)
+    cli_command(__name__, 'network vnet peering delete', vnet_peering_path + 'delete', cf_virtual_network_peerings)
+    cli_generic_update_command(__name__, 'network vnet peering update', vnet_peering_path + 'get', vnet_peering_path + 'create_or_update', cf_virtual_network_peerings, setter_arg_name='virtual_network_peering_parameters')
 
 # Traffic Manager ProfileOperations
-factory = lambda _: get_mgmt_service_client(TrafficManagerManagementClient).profiles
-cli_command('network traffic-manager profile check-dns', ProfilesOperations.check_traffic_manager_relative_dns_name_availability, factory)
-cli_command('network traffic-manager profile show', ProfilesOperations.get, factory)
-cli_command('network traffic-manager profile delete', ProfilesOperations.delete, factory)
-cli_command('network traffic-manager profile list', list_traffic_manager_profiles)
-cli_generic_update_command('network traffic-manager profile update', ProfilesOperations.get, ProfilesOperations.create_or_update, factory)
+tm_profile_path = 'azure.mgmt.trafficmanager.operations.profiles_operations#ProfilesOperations.'
+cli_command(__name__, 'network traffic-manager profile check-dns', tm_profile_path + 'check_traffic_manager_relative_dns_name_availability', cf_traffic_manager_mgmt_profiles)
+cli_command(__name__, 'network traffic-manager profile show', tm_profile_path + 'get', cf_traffic_manager_mgmt_profiles, exception_handler=empty_on_404)
+cli_command(__name__, 'network traffic-manager profile delete', tm_profile_path + 'delete', cf_traffic_manager_mgmt_profiles)
+cli_command(__name__, 'network traffic-manager profile list', custom_path + 'list_traffic_manager_profiles')
+cli_command(__name__, 'network traffic-manager profile create', custom_path + 'create_traffic_manager_profile', transform=transform_traffic_manager_create_output)
+cli_generic_update_command(__name__, 'network traffic-manager profile update',
+                           tm_profile_path + 'get', tm_profile_path + 'create_or_update', cf_traffic_manager_mgmt_profiles,
+                           custom_function_op=custom_path + 'update_traffic_manager_profile')
 
-factory = lambda _: get_mgmt_service_client(TrafficManagerProfileClient).traffic_manager_profile
-cli_command('network traffic-manager profile create', TrafficManagerProfileOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network traffic-manager profile create'))
 
 # Traffic Manager EndpointOperations
-factory = lambda _: get_mgmt_service_client(TrafficManagerManagementClient).endpoints
-cli_command('network traffic-manager endpoint show', EndpointsOperations.get, factory)
-cli_command('network traffic-manager endpoint delete', EndpointsOperations.delete, factory)
-cli_command('network traffic-manager endpoint create', create_traffic_manager_endpoint)
-cli_command('network traffic-manager endpoint list', list_traffic_manager_endpoints)
-cli_generic_update_command('network traffic-manager endpoint update', EndpointsOperations.get, EndpointsOperations.create_or_update, factory)
+tm_endpoint_path = 'azure.mgmt.trafficmanager.operations.endpoints_operations#EndpointsOperations.'
+cli_command(__name__, 'network traffic-manager endpoint show', tm_endpoint_path + 'get', cf_traffic_manager_mgmt_endpoints, exception_handler=empty_on_404)
+cli_command(__name__, 'network traffic-manager endpoint delete', tm_endpoint_path + 'delete', cf_traffic_manager_mgmt_endpoints)
+cli_command(__name__, 'network traffic-manager endpoint create', custom_path + 'create_traffic_manager_endpoint')
+cli_command(__name__, 'network traffic-manager endpoint list', custom_path + 'list_traffic_manager_endpoints')
+cli_generic_update_command(__name__, 'network traffic-manager endpoint update',
+                           tm_endpoint_path + 'get', tm_endpoint_path + 'create_or_update', cf_traffic_manager_mgmt_endpoints,
+                           custom_function_op=custom_path + 'update_traffic_manager_endpoint')
+
+tm_geographic_path = 'azure.mgmt.trafficmanager.operations.geographic_hierarchies_operations#GeographicHierarchiesOperations.'
+cli_command(__name__, 'network traffic-manager endpoint show-geographic-hierarchy', tm_geographic_path + 'get_default', cf_tm_geographic, table_transformer=transform_geographic_hierachy_table_output)
 
 # DNS ZonesOperations
-factory = lambda _: get_mgmt_service_client(DnsManagementClient).zones
-cli_command('network dns zone show', ZonesOperations.get, factory)
-cli_command('network dns zone delete', ZonesOperations.delete, factory)
-cli_command('network dns zone list', list_dns_zones)
-cli_generic_update_command('network dns zone update', ZonesOperations.get, ZonesOperations.create_or_update, factory)
-cli_command('network dns zone import', import_zone)
-cli_command('network dns zone export', export_zone)
-
-factory = lambda _: get_mgmt_service_client(DnsZoneClient).dns_zone
-cli_command('network dns zone create', DnsZoneOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting network dns zone create'))
+dns_zone_path = 'azure.mgmt.dns.operations.zones_operations#ZonesOperations.'
+cli_command(__name__, 'network dns zone show', dns_zone_path + 'get', cf_dns_mgmt_zones, table_transformer=transform_dns_zone_table_output, exception_handler=empty_on_404)
+cli_command(__name__, 'network dns zone delete', dns_zone_path + 'delete', cf_dns_mgmt_zones, confirmation=True)
+cli_command(__name__, 'network dns zone show', dns_zone_path + 'get', cf_dns_mgmt_zones, table_transformer=transform_dns_zone_table_output, exception_handler=empty_on_404)
+cli_command(__name__, 'network dns zone delete', dns_zone_path + 'delete', cf_dns_mgmt_zones, confirmation=True)
+cli_command(__name__, 'network dns zone list', custom_path + 'list_dns_zones', table_transformer=transform_dns_zone_table_output)
+cli_generic_update_command(__name__, 'network dns zone update', dns_zone_path + 'get', dns_zone_path + 'create_or_update', cf_dns_mgmt_zones)
+cli_command(__name__, 'network dns zone import', custom_path + 'import_zone')
+cli_command(__name__, 'network dns zone export', custom_path + 'export_zone')
+cli_command(__name__, 'network dns zone create', custom_path + 'create_dns_zone', cf_dns_mgmt_zones)
 
 # DNS RecordSetsOperations
-factory = lambda _: get_mgmt_service_client(DnsManagementClient).record_sets
-cli_command('network dns record-set show', RecordSetsOperations.get, factory)
-cli_command('network dns record-set delete', RecordSetsOperations.delete, factory)
-cli_command('network dns record-set list', RecordSetsOperations.list_all_in_resource_group, factory)
-cli_command('network dns record-set create', create_dns_record_set)
-cli_generic_update_command('network dns record-set update', RecordSetsOperations.get, RecordSetsOperations.create_or_update, factory)
+dns_record_set_path = 'azure.mgmt.dns.operations.record_sets_operations#RecordSetsOperations.'
+cli_command(__name__, 'network dns record-set list', custom_path + 'list_dns_record_set', cf_dns_mgmt_record_sets, transform=transform_dns_record_set_output)
+for record in ['a', 'aaaa', 'mx', 'ns', 'ptr', 'srv', 'txt']:
+    cli_command(__name__, 'network dns record-set {} show'.format(record), dns_record_set_path + 'get', cf_dns_mgmt_record_sets, transform=transform_dns_record_set_output, exception_handler=empty_on_404)
+    cli_command(__name__, 'network dns record-set {} delete'.format(record), dns_record_set_path + 'delete', cf_dns_mgmt_record_sets, confirmation=True)
+    cli_command(__name__, 'network dns record-set {} list'.format(record), custom_path + 'list_dns_record_set', cf_dns_mgmt_record_sets, transform=transform_dns_record_set_output, table_transformer=transform_dns_record_set_table_output)
+    cli_command(__name__, 'network dns record-set {} create'.format(record), custom_path + 'create_dns_record_set', transform=transform_dns_record_set_output)
+    cli_command(__name__, 'network dns record-set {} add-record'.format(record), custom_path + 'add_dns_{}_record'.format(record), transform=transform_dns_record_set_output)
+    cli_command(__name__, 'network dns record-set {} remove-record'.format(record), custom_path + 'remove_dns_{}_record'.format(record), transform=transform_dns_record_set_output)
+    cli_generic_update_command(__name__, 'network dns record-set {} update'.format(record),
+                               dns_record_set_path + 'get',
+                               dns_record_set_path + 'create_or_update',
+                               cf_dns_mgmt_record_sets,
+                               custom_function_op=custom_path + 'update_dns_record_set',
+                               transform=transform_dns_record_set_output)
 
-# DNS RecordOperations
-cli_command('network dns record aaaa add', add_dns_aaaa_record)
-cli_command('network dns record a add', add_dns_a_record)
-cli_command('network dns record cname add', add_dns_cname_record)
-cli_command('network dns record ns add', add_dns_ns_record)
-cli_command('network dns record mx add', add_dns_mx_record)
-cli_command('network dns record ptr add', add_dns_ptr_record)
-cli_command('network dns record srv add', add_dns_srv_record)
-cli_command('network dns record txt add', add_dns_txt_record)
-cli_command('network dns record update-soa', update_dns_soa_record)
-cli_command('network dns record aaaa remove', remove_dns_aaaa_record)
-cli_command('network dns record a remove', remove_dns_a_record)
-cli_command('network dns record cname remove', remove_dns_cname_record)
-cli_command('network dns record ns remove', remove_dns_ns_record)
-cli_command('network dns record mx remove', remove_dns_mx_record)
-cli_command('network dns record ptr remove', remove_dns_ptr_record)
-cli_command('network dns record srv remove', remove_dns_srv_record)
-cli_command('network dns record txt remove', remove_dns_txt_record)
+cli_command(__name__, 'network dns record-set soa show', dns_record_set_path + 'get', cf_dns_mgmt_record_sets, transform=transform_dns_record_set_output, exception_handler=empty_on_404)
+cli_command(__name__, 'network dns record-set soa update', custom_path + 'update_dns_soa_record', transform=transform_dns_record_set_output)
+
+cli_command(__name__, 'network dns record-set cname show', dns_record_set_path + 'get', cf_dns_mgmt_record_sets, transform=transform_dns_record_set_output, exception_handler=empty_on_404)
+cli_command(__name__, 'network dns record-set cname delete', dns_record_set_path + 'delete', cf_dns_mgmt_record_sets)
+cli_command(__name__, 'network dns record-set cname list', custom_path + 'list_dns_record_set', cf_dns_mgmt_record_sets, transform=transform_dns_record_set_output, table_transformer=transform_dns_record_set_table_output)
+cli_command(__name__, 'network dns record-set cname create', custom_path + 'create_dns_record_set', transform=transform_dns_record_set_output)
+cli_command(__name__, 'network dns record-set cname set-record', custom_path + 'add_dns_cname_record', transform=transform_dns_record_set_output)
+cli_command(__name__, 'network dns record-set cname remove-record', custom_path + 'remove_dns_cname_record', transform=transform_dns_record_set_output)

@@ -1,17 +1,19 @@
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
 import platform
 import subprocess
 from abc import abstractmethod
+
 
 def disable_http_proxy():
     """
     Disables the HTTP proxy
     """
     _get_proxy_instance().disable_http_proxy()
+
 
 def set_http_proxy(host, port):
     """
@@ -24,6 +26,7 @@ def set_http_proxy(host, port):
         raise ValueError('Missing port')
 
     _get_proxy_instance().set_http_proxy(host, port)
+
 
 def _get_proxy_instance():
     """
@@ -40,10 +43,12 @@ def _get_proxy_instance():
     else:
         raise NotImplementedError('Not implemented yet for {}'.format(os_platform))
 
+
 class Proxy(object):
     """
     Base proxy class
     """
+
     def __init__(self):
         pass
 
@@ -61,10 +66,8 @@ class Proxy(object):
         """
         pass
 
-class LinuxProxy(Proxy):
-    def __init__(self):
-        super(LinuxProxy, self).__init__()
 
+class LinuxProxy(Proxy):
     def set_http_proxy(self, host, port):
         """
         Sets the HTTP proxy on Linux
@@ -81,10 +84,8 @@ class LinuxProxy(Proxy):
         """
         subprocess.call('sudo gsettings set org.gnome.system.proxy mode \'none\'', shell=True)
 
-class MacProxy(Proxy):
-    def __init__(self):
-        super(MacProxy, self).__init__()
 
+class MacProxy(Proxy):
     def set_http_proxy(self, host, port):
         """
         Sets the HTTP proxy

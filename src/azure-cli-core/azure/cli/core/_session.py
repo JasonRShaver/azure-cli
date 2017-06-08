@@ -1,7 +1,7 @@
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
 import json
 import os
@@ -14,6 +14,7 @@ except ImportError:
 
 from codecs import open as codecs_open
 
+
 class Session(collections.MutableMapping):
     '''A simple dict-like class that is backed by a JSON file.
 
@@ -22,6 +23,7 @@ class Session(collections.MutableMapping):
     '''
 
     def __init__(self, encoding=None):
+        super(Session, self).__init__()
         self.filename = None
         self.data = {}
         self._encoding = encoding if encoding else 'utf-8-sig'
@@ -73,6 +75,7 @@ class Session(collections.MutableMapping):
 
     def __len__(self):
         return len(self.data)
+
 
 # ACCOUNT contains subscriptions information
 ACCOUNT = Session()

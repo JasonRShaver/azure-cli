@@ -1,7 +1,7 @@
 {
   "swagger": "2.0",
   "info": {
-    "version": "2016-02-03",
+    "version": "2016-11-14",
     "title": "iotHubDeviceClient",
     "description": "API for IoT Hub Device Identities."
   },
@@ -17,7 +17,7 @@
         ],
         "summary": "Creates a new device identity in the identity registry of an IoT Hub.",
         "description": "Creates a new device identity in the identity registry of an IoT Hub.",
-        "operationId": "IotHubDevices_Create",
+        "operationId": "IotHubDevices_CreateOrUpdate",
         "consumes": [
           "application/json",
           "text/json"
@@ -33,20 +33,28 @@
           {
             "name": "deviceId",
             "in": "path",
-            "description": "The Id of the device.",
+            "description": "Device Id.",
             "required": true,
             "type": "string",
             "minLength": 1,
             "maxLength": 128
           },
           {
-            "name": "createDeviceRequest",
+            "name": "deviceDescription",
             "in": "body",
             "description": "request.",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/CreateDeviceRequest"
+              "$ref": "#/definitions/DeviceDescription"
             }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Specify the ETag for the device identity.",
+            "required": false,
+            "type": "string",
+            "default": "*"
           }
         ],
         "responses": {
@@ -77,10 +85,7 @@
         "summary": "Get device identity from the identity registry of an IoT Hub.",
         "description": "Get device identity from the identity registry of an IoT Hub.",
         "operationId": "IotHubDevices_Get",
-        "consumes": [
-          "application/json",
-          "text/json"
-        ],
+        "consumes": [ ],
         "produces": [
           "application/json",
           "text/json"
@@ -92,7 +97,7 @@
           {
             "name": "deviceId",
             "in": "path",
-            "description": "The Id of the device.",
+            "description": "Device Id.",
             "required": true,
             "type": "string",
             "minLength": 1,
@@ -121,10 +126,7 @@
         "summary": "Delete a device identity in the identity registry of an IoT Hub.",
         "description": "Delete a device identity in the identity registry of an IoT Hub.",
         "operationId": "IotHubDevices_Delete",
-        "consumes": [
-          "application/json",
-          "text/json"
-        ],
+        "consumes": [ ],
         "produces": [
           "application/json",
           "text/json"
@@ -136,7 +138,7 @@
           {
             "name": "deviceId",
             "in": "path",
-            "description": "The Id of the device.",
+            "description": "Device Id.",
             "required": true,
             "type": "string",
             "minLength": 1,
@@ -147,7 +149,8 @@
             "in": "header",
             "description": "Specify the ETag for the device identity.",
             "required": true,
-            "type": "string"
+            "type": "string",
+            "default": "*"
           }
         ],
         "responses": {
@@ -171,10 +174,7 @@
         "summary": "List device identities from the identity registry of an IoT Hub.",
         "description": "List device identities from the identity registry of an IoT Hub.",
         "operationId": "IotHubDevices_List",
-        "consumes": [
-          "application/json",
-          "text/json"
-        ],
+        "consumes": [ ],
         "produces": [
           "application/json",
           "text/json"
@@ -211,6 +211,324 @@
           }
         }
       }
+    },
+    "/devices/{deviceId}/messages/events": {
+      "post": {
+        "tags": [
+          "IoTDevices"
+        ],
+        "summary": "Send a device-to-cloud message.",
+        "description": "Send a device-to-cloud message.",
+        "operationId": "IotHubDevices_SendMessage",
+        "consumes": [
+          "application/octet-stream"
+        ],
+        "produces": [
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/parameters/api-version"
+          },
+          {
+            "name": "deviceId",
+            "in": "path",
+            "description": "Device Id.",
+            "required": true,
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          {
+            "name": "message",
+            "in": "body",
+            "description": "Message body.",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/MessageBody"
+            }
+          },
+          {
+            "name": "IotHub-MessageId",
+            "in": "header",
+            "description": "Message Id.",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "IotHub-CorrelationId",
+            "in": "header",
+            "description": "Message correlation Id.",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "IotHub-UserId",
+            "in": "header",
+            "description": "User Id.",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Message sent."
+          },
+          "default": {
+            "description": "DefaultErrorResponse",
+            "schema": {
+              "$ref": "#/definitions/ErrorDetails"
+            }
+          }
+        }
+      }
+    },
+    "/devices/{deviceId}/messages/devicebound": {
+      "get": {
+        "tags": [
+          "IoTDevices"
+        ],
+        "summary": "Receive a device-to-cloud message.",
+        "description": "Receive a device-to-cloud message.",
+        "operationId": "IotHubDevices_ReceiveMessage",
+        "consumes": [ ],
+        "produces": [
+          "application/octet-stream",
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/parameters/api-version"
+          },
+          {
+            "name": "deviceId",
+            "in": "path",
+            "description": "Device Id.",
+            "required": true,
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          {
+            "name": "IotHub-MessageLockTimeout",
+            "in": "header",
+            "description": "In case a message returned to this call, this specifies the amount of time, the message will be invisible to other receive calls.",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Message body.",
+            "schema": {
+              "type": "string",
+              "format": "binary",
+              "description": "Message body."
+            },
+            "headers": {
+              "ETag": {
+                "description": "Id for the message lock used to resolve races when completing, rejecting, or abandoning the message.",
+                "type": "string"
+              },
+              "iothub-sequencenumber": {
+                "description": "Message sequence number (assigned by IoTHub, it is unique per cloud-to-device message queue).",
+                "type": "string"
+              },
+              "iothub-enqueuedtime": {
+                "description": "Time when the message was received by IoTHub. Format is ISO8601.",
+                "type": "string"
+              },
+              "iothub-expiry": {
+                "description": "Time when the message lock will expire. Format is ISO8601.",
+                "type": "string"
+              },
+              "iothub-deliverycount": {
+                "description": "Message delivery count system property.",
+                "type": "string"
+              },
+              "iothub-messageid": {
+                "description": "MessageId system property.",
+                "type": "string"
+              },
+              "iothub-correlationid": {
+                "description": "CorrelationId system property.",
+                "type": "string"
+              },
+              "iothub-userid": {
+                "description": "UserId system property.",
+                "type": "string"
+              },
+              "iothub-to": {
+                "description": "UserId system property.",
+                "type": "string"
+              },
+              "iothub-ack": {
+                "description": "ACK system property.",
+                "type": "string"
+              },
+              "Content-Type": {
+                "description": "Content-Type message property.",
+                "type": "string"
+              },
+              "Content-Encoding": {
+                "description": "Content-Encoding message property.",
+                "type": "string"
+              }
+            }
+          },
+          "204": {
+            "description": "No message."
+          },
+          "default": {
+            "description": "DefaultErrorResponse",
+            "schema": {
+              "$ref": "#/definitions/ErrorDetails"
+            }
+          }
+        }
+      }
+    },
+    "/devices/{deviceId}/messages/devicebound/{lockToken}": {
+      "delete": {
+        "tags": [
+          "IoTDevices"
+        ],
+        "summary": "Complete or reject a cloud-to-device message.",
+        "description": "Complete or reject a cloud-to-device message",
+        "operationId": "IotHubDevices_CompleteOrRejectMessage",
+        "consumes": [ ],
+        "produces": [
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/parameters/api-version"
+          },
+          {
+            "name": "deviceId",
+            "in": "path",
+            "description": "Device Id.",
+            "required": true,
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          {
+            "name": "lockToken",
+            "in": "path",
+            "description": "Message etag.",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "reject",
+            "in": "query",
+            "description": "Reject message flag.",
+            "required": false,
+            "type": "string",
+            "allowEmptyValue": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Completed or rejected."
+          },
+          "default": {
+            "description": "DefaultErrorResponse",
+            "schema": {
+              "$ref": "#/definitions/ErrorDetails"
+            }
+          }
+        }
+      }
+    },
+    "/devices/{deviceId}/messages/devicebound/{lockToken}/abandon": {
+      "post": {
+        "tags": [
+          "IoTDevices"
+        ],
+        "summary": "Abandon a cloud-to-device message.",
+        "description": "Abandon a cloud-to-device message.",
+        "operationId": "IotHubDevices_AbandonMessage",
+        "consumes": [ ],
+        "produces": [
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/parameters/api-version"
+          },
+          {
+            "name": "deviceId",
+            "in": "path",
+            "description": "Device Id.",
+            "required": true,
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          {
+            "name": "lockToken",
+            "in": "path",
+            "description": "Message etag.",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Abandoned."
+          },
+          "default": {
+            "description": "DefaultErrorResponse",
+            "schema": {
+              "$ref": "#/definitions/ErrorDetails"
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{jobId}": {
+      "delete": {
+        "tags": [
+          "IoTDevices"
+        ],
+        "summary": "Cancel a job.",
+        "description": "Cancel a job.",
+        "operationId": "IotHubDevices_CancelJob",
+        "consumes": [ ],
+        "produces": [
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/parameters/api-version"
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "description": "Job Id.",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Cancelled."
+          },
+          "default": {
+            "description": "DefaultErrorResponse",
+            "schema": {
+              "$ref": "#/definitions/ErrorDetails"
+            }
+          }
+        }
+      }
     }
   },
   "definitions": {
@@ -237,30 +555,9 @@
         }
       }
     },
-    "CreateDeviceRequest": {
-      "type": "object",
-      "properties": {
-        "deviceId": {
-          "description": "Device Id. A case-sensitive string ( up to 128 char long).",
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
-        },
-        "authorization": {
-          "$ref": "#/definitions/Authentication"
-        },
-        "status": {
-          "description": "'enabled' or 'disabled', representing status of the device",
-          "type": "string"
-        },
-        "statusReason": {
-          "description": "A string representing reason of the device status",
-          "type": "string"
-        }
-      }
-    },
     "DeviceDescription": {
       "type": "object",
+      "description": "Device identity.",
       "properties": {
         "deviceId": {
           "description": "Device Id. A case-sensitive string ( up to 128 char long).",
@@ -316,17 +613,19 @@
     },
     "Authentication": {
       "type": "object",
+      "description": "Authentication information.",
       "properties": {
         "symmetricKey": {
           "$ref": "#/definitions/SymmetricKey"
         },
         "x509Thumbprint": {
-          "type": "string"
+          "$ref": "#/definitions/X509Thumbprint"
         }
       }
     },
     "SymmetricKey": {
       "type": "object",
+      "description": "Symmetric keys to access device.",
       "properties": {
         "primaryKey": {
           "description": "The primary key.",
@@ -337,6 +636,24 @@
           "type": "string"
         }
       }
+    },
+    "X509Thumbprint": {
+      "type": "object",
+      "description": "X.509 certificate thumbprint associated with device.",
+      "properties": {
+        "primaryThumbprint": {
+          "description": "The primary thumbprint.",
+          "type": "string"
+        },
+        "secondaryThumbprint": {
+          "description": "The secondary thumbprint.",
+          "type": "string"
+        }
+      }
+    },
+    "MessageBody": {
+      "type": "string",
+      "description": "Message body."
     }
   },
   "parameters": {
@@ -353,7 +670,7 @@
       "description": "Version of the Api.",
       "required": true,
       "type": "string",
-      "default": "2016-02-03"
+      "default": "2016-11-14"
     }
   }
 }

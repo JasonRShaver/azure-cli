@@ -1,16 +1,17 @@
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
 import requests
 import adal
 
 from msrest.authentication import Authentication
 
-from azure.cli.core._util import CLIError
+from azure.cli.core.util import CLIError
 
-class AdalAuthentication(Authentication):#pylint: disable=too-few-public-methods
+
+class AdalAuthentication(Authentication):  # pylint: disable=too-few-public-methods
 
     def __init__(self, token_retriever):
         self._token_retriever = token_retriever
@@ -19,11 +20,12 @@ class AdalAuthentication(Authentication):#pylint: disable=too-few-public-methods
         session = super(AdalAuthentication, self).signed_session()
 
         try:
-            scheme, token = self._token_retriever()
+            scheme, token, _ = self._token_retriever()
         except adal.AdalError as err:
-            #pylint: disable=no-member
-            if (hasattr(err, 'error_response') and ('error_description' in err.error_response)
-                    and ('AADSTS70008:' in err.error_response['error_description'])):
+            # pylint: disable=no-member
+            if (hasattr(err, 'error_response') and
+                    ('error_description' in err.error_response) and
+                    ('AADSTS70008:' in err.error_response['error_description'])):
                 raise CLIError("Credentials have expired due to inactivity. Please run 'az login'")
 
             raise CLIError(err)

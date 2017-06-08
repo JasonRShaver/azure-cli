@@ -1,7 +1,7 @@
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
 from __future__ import print_function
 
@@ -20,11 +20,11 @@ from _common import get_name_from_path, get_config, to_snake_case
 def _autorest_client_name(name):
     return '{}creationclient'.format(str.lower(name))
 
-HEADER = """#---------------------------------------------------------------------------------------------
+HEADER = """# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
-#pylint: skip-file
+# --------------------------------------------------------------------------------------------
+# pylint: skip-file
 """
 
 INIT_FILE_CONTENTS = HEADER + """import pkg_resources

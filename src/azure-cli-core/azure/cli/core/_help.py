@@ -1,7 +1,7 @@
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
 from __future__ import print_function
 import argparse
@@ -14,6 +14,29 @@ __all__ = ['print_detailed_help', 'print_welcome_message', 'GroupHelpFile', 'Com
 
 FIRST_LINE_PREFIX = ': '
 
+PRIVACY_STATEMENT = """
+Welcome to Azure CLI!
+---------------------
+Use `az -h` to see available commands or go to https://aka.ms/cli.
+
+Telemetry
+---------
+The Azure CLI collects usage data in order to improve your experience.
+The data is anonymous and does not include commandline argument values.
+The data is collected by Microsoft.
+
+You can change your telemetry settings with `az configure`.
+"""
+
+
+def show_privacy_statement():
+    from azure.cli.core._config import az_config, set_global_config_value
+    first_ran = az_config.getboolean('core', 'first_run', fallback=False)
+    if not first_ran:
+        print(PRIVACY_STATEMENT, file=sys.stdout)
+        set_global_config_value('core', 'first_run', 'yes')
+
+
 def show_help(nouns, parser, is_group):
     delimiters = ' '.join(nouns)
     help_file = CommandHelpFile(delimiters, parser) \
@@ -22,27 +45,31 @@ def show_help(nouns, parser, is_group):
 
     help_file.load(parser)
 
-    if len(nouns) == 0:
+    if not nouns:
         print("\nFor version info, use 'az --version'")
         help_file.command = ''
 
     print_detailed_help(help_file)
 
+
 def show_welcome(parser):
+    show_privacy_statement()
     print_welcome_message()
 
     help_file = GroupHelpFile('', parser)
     print_description_list(help_file.children)
 
+
 def print_welcome_message():
     _print_indent(r"""
-     /\                        
-    /  \    _____   _ _ __ ___ 
+     /\
+    /  \    _____   _ _ __ ___
    / /\ \  |_  / | | | \'__/ _ \
   / ____ \  / /| |_| | | |  __/
  /_/    \_\/___|\__,_|_|  \___|
 """)
     _print_indent('\nWelcome to the cool new Azure CLI!\n\nHere are the base commands:\n')
+
 
 def print_detailed_help(help_file):
     _print_header(help_file)
@@ -53,8 +80,9 @@ def print_detailed_help(help_file):
     elif help_file.type == 'group':
         _print_groups(help_file)
 
-    if len(help_file.examples) > 0:
+    if help_file.examples:
         _print_examples(help_file)
+
 
 def print_description_list(help_files):
     indent = 1
@@ -62,11 +90,12 @@ def print_description_list(help_files):
     for help_file in sorted(help_files, key=lambda h: h.name):
         _print_indent('{0}{1}{2}'.format(help_file.name,
                                          _get_column_indent(help_file.name, max_name_length),
-                                         FIRST_LINE_PREFIX + help_file.short_summary \
-                                             if help_file.short_summary \
-                                             else ''),
+                                         FIRST_LINE_PREFIX + help_file.short_summary
+                                         if help_file.short_summary
+                                         else ''),
                       indent,
                       _get_hanging_indent(max_name_length, indent))
+
 
 def print_arguments(help_file):
     indent = 1
@@ -75,7 +104,7 @@ def print_arguments(help_file):
         _print_indent('')
         return
 
-    if len(help_file.parameters) == 0:
+    if not help_file.parameters:
         _print_indent('none', indent)
     required_tag = ' [Required]'
     max_name_length = max(len(p.name) + (len(required_tag) if p.required else 0)
@@ -85,9 +114,12 @@ def print_arguments(help_file):
     group_registry = ArgumentGroupRegistry(
         [p.group_name for p in help_file.parameters if p.group_name])
 
-    for p in sorted(help_file.parameters,
-                    key=lambda p: group_registry.get_group_priority(p.group_name)
-                    + str(not p.required) + p.name):
+    def _get_parameter_key(parameter):
+        return '{}{}{}'.format(group_registry.get_group_priority(parameter.group_name),
+                               str(not parameter.required),
+                               parameter.name)
+
+    for p in sorted(help_file.parameters, key=_get_parameter_key):
         indent = 1
         required_text = required_tag if p.required else ''
 
@@ -120,7 +152,8 @@ def print_arguments(help_file):
 
     return indent
 
-class ArgumentGroupRegistry(object): # pylint: disable=too-few-public-methods
+
+class ArgumentGroupRegistry(object):  # pylint: disable=too-few-public-methods
 
     def __init__(self, group_list):
 
@@ -129,7 +162,7 @@ class ArgumentGroupRegistry(object): # pylint: disable=too-few-public-methods
             'Resource Id Arguments': 1,
             'Generic Update Arguments': 998,
             'Global Arguments': 1000,
-            }
+        }
         priority = 2
         # any groups not already in the static dictionary should be prioritized alphabetically
         other_groups = [g for g in sorted(list(set(group_list))) if g not in self.priorities]
@@ -140,6 +173,7 @@ class ArgumentGroupRegistry(object): # pylint: disable=too-few-public-methods
     def get_group_priority(self, group_name):
         key = self.priorities.get(group_name, 0)
         return "%06d" % key
+
 
 def _print_header(help_file):
     indent = 0
@@ -158,6 +192,7 @@ def _print_header(help_file):
         _print_indent('{0}'.format(help_file.long_summary.rstrip()), indent)
     _print_indent('')
 
+
 def _print_groups(help_file):
 
     def _print_items(items):
@@ -165,14 +200,14 @@ def _print_groups(help_file):
             column_indent = _get_column_indent(c.name, max_name_length)
             summary = FIRST_LINE_PREFIX + c.short_summary if c.short_summary else ''
             summary = summary.replace('\n', ' ')
-            hanging_indent = max_name_length + indent*4 + 2
+            hanging_indent = max_name_length + indent * 4 + 2
             _print_indent(
                 '{0}{1}{2}'.format(c.name, column_indent, summary), indent, hanging_indent)
         _print_indent('')
 
     indent = 1
     max_name_length = max(len(c.name) for c in help_file.children) \
-        if len(help_file.children) > 0 \
+        if help_file.children \
         else 0
     subgroups = [c for c in help_file.children if isinstance(c, GroupHelpFile)]
     subcommands = [c for c in help_file.children if c not in subgroups]
@@ -185,6 +220,7 @@ def _print_groups(help_file):
         _print_indent('Commands:')
         _print_items(subcommands)
 
+
 def _get_choices_defaults_sources_str(p):
     choice_str = '  Allowed values: {0}.'.format(', '.join(sorted([str(x) for x in p.choices]))) \
         if p.choices else ''
@@ -193,6 +229,7 @@ def _get_choices_defaults_sources_str(p):
     value_sources_str = '  Values from: {0}.'.format(', '.join(p.value_sources)) \
         if p.value_sources else ''
     return '{0}{1}{2}'.format(choice_str, default_str, value_sources_str)
+
 
 def _print_examples(help_file):
     indent = 0
@@ -206,7 +243,11 @@ def _print_examples(help_file):
         indent = 2
         _print_indent('{0}'.format(e.text), indent)
 
-class HelpObject(object): #pylint: disable=too-few-public-methods
+        print('')
+
+
+class HelpObject(object):  # pylint: disable=too-few-public-methods
+
     def __init__(self, **kwargs):
         self._short_summary = ''
         self._long_summary = ''
@@ -228,16 +269,18 @@ class HelpObject(object): #pylint: disable=too-few-public-methods
     def long_summary(self, value):
         self._long_summary = _normalize_text(value)
 
-class HelpFile(HelpObject): #pylint: disable=too-few-public-methods,too-many-instance-attributes
+
+class HelpFile(HelpObject):  # pylint: disable=too-few-public-methods,too-many-instance-attributes
+
     def __init__(self, delimiters):
         super(HelpFile, self).__init__()
         self.delimiters = delimiters
-        self.name = delimiters.split()[-1] if len(delimiters) > 0 else delimiters
+        self.name = delimiters.split()[-1] if delimiters else delimiters
         self.command = delimiters
         self.type = ''
         self.short_summary = ''
         self.long_summary = ''
-        self.examples = ''
+        self.examples = []
 
     def load(self, options):
         description = getattr(options, 'description', None)
@@ -262,6 +305,20 @@ class HelpFile(HelpObject): #pylint: disable=too-few-public-methods,too-many-ins
         if file_data:
             self._load_from_data(file_data)
 
+    @staticmethod
+    def _should_include_example(ex):
+        min_profile = ex.get('min_profile')
+        max_profile = ex.get('max_profile')
+        if min_profile or max_profile:
+            from azure.cli.core.profiles import supported_api_version, PROFILE_TYPE
+            # yaml will load this as a datetime if it's a date, we need a string.
+            min_profile = str(min_profile) if min_profile else None
+            max_profile = str(max_profile) if max_profile else None
+            return supported_api_version(PROFILE_TYPE,
+                                         min_api=min_profile,
+                                         max_api=max_profile)
+        return True
+
     def _load_from_data(self, data):
         if not data:
             return
@@ -279,10 +336,14 @@ class HelpFile(HelpObject): #pylint: disable=too-few-public-methods,too-many-ins
         self.long_summary = data.get('long-summary')
 
         if 'examples' in data:
-            self.examples = [HelpExample(d) for d in data['examples']]
+            self.examples = []
+            for d in data['examples']:
+                if HelpFile._should_include_example(d):
+                    self.examples.append(HelpExample(d))
 
 
-class GroupHelpFile(HelpFile): #pylint: disable=too-few-public-methods
+class GroupHelpFile(HelpFile):  # pylint: disable=too-few-public-methods
+
     def __init__(self, delimiters, parser):
         super(GroupHelpFile, self).__init__(delimiters)
         self.type = 'group'
@@ -296,14 +357,16 @@ class GroupHelpFile(HelpFile): #pylint: disable=too-few-public-methods
                 child.load(options)
                 self.children.append(child)
 
-class CommandHelpFile(HelpFile): #pylint: disable=too-few-public-methods
+
+class CommandHelpFile(HelpFile):  # pylint: disable=too-few-public-methods
+
     def __init__(self, delimiters, parser):
         super(CommandHelpFile, self).__init__(delimiters)
         self.type = 'command'
 
         self.parameters = []
 
-        for action in [a for a in parser._actions if a.help != argparse.SUPPRESS]: # pylint: disable=protected-access
+        for action in [a for a in parser._actions if a.help != argparse.SUPPRESS]:  # pylint: disable=protected-access
             self.parameters.append(HelpParameter(' '.join(sorted(action.option_strings)),
                                                  action.help,
                                                  required=action.required,
@@ -328,16 +391,12 @@ class CommandHelpFile(HelpFile): #pylint: disable=too-few-public-methods
                 param.update_from_data(loaded_param)
             loaded_params.append(param)
 
-        extra_param = next((p for p in data['parameters']
-                            if p['name'] not in [lp.name for lp in loaded_params]),
-                           None)
-        if extra_param:
-            raise HelpAuthoringException('Extra help param {0}'.format(extra_param['name']))
         self.parameters = loaded_params
 
 
-class HelpParameter(HelpObject): #pylint: disable=too-few-public-methods, too-many-instance-attributes
-    def __init__(self, param_name, description, required, choices=None, #pylint: disable=too-many-arguments
+class HelpParameter(HelpObject):  # pylint: disable=too-few-public-methods, too-many-instance-attributes
+
+    def __init__(self, param_name, description, required, choices=None,
                  default=None, group_name=None):
         super(HelpParameter, self).__init__()
         self.name = param_name
@@ -369,16 +428,18 @@ class HelpParameter(HelpObject): #pylint: disable=too-few-public-methods, too-ma
             self.value_sources = data.get('populator-commands')
 
 
-class HelpExample(object): #pylint: disable=too-few-public-methods
+class HelpExample(object):  # pylint: disable=too-few-public-methods
+
     def __init__(self, _data):
         self.name = _data['name']
         self.text = _data['text']
 
+
 def _print_indent(s, indent=0, subsequent_spaces=-1):
-    tw = textwrap.TextWrapper(initial_indent='    '*indent,
-                              subsequent_indent=('    '*indent
+    tw = textwrap.TextWrapper(initial_indent='    ' * indent,
+                              subsequent_indent=('    ' * indent
                                                  if subsequent_spaces == -1
-                                                 else ' '*subsequent_spaces),
+                                                 else ' ' * subsequent_spaces),
                               replace_whitespace=False,
                               width=100)
     paragraphs = s.split('\n')
@@ -388,11 +449,14 @@ def _print_indent(s, indent=0, subsequent_spaces=-1):
         except UnicodeEncodeError:
             print(tw.fill(p).encode('ascii', 'ignore').decode('utf-8', 'ignore'), file=sys.stdout)
 
+
 def _get_column_indent(text, max_name_length):
-    return ' '*(max_name_length - len(text))
+    return ' ' * (max_name_length - len(text))
+
 
 def _get_hanging_indent(max_length, indent):
     return max_length + (indent * 4) + len(FIRST_LINE_PREFIX)
+
 
 def _normalize_text(s):
     if not s or len(s) < 2:
@@ -402,16 +466,19 @@ def _normalize_text(s):
     trailing_period = '' if s[-1] in '.!?' else '.'
     return initial_upper + trailing_period
 
+
 def _load_help_file_from_string(text):
     import yaml
     try:
         return yaml.load(text) if text else None
-    except Exception: #pylint: disable=broad-except
+    except Exception:  # pylint: disable=broad-except
         return text
+
 
 def _get_single_metadata(cmd_table):
     assert len(cmd_table) == 1
     return next(metadata for _, metadata in cmd_table.items())
+
 
 class HelpAuthoringException(Exception):
     pass

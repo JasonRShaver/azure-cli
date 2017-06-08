@@ -1,7 +1,7 @@
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
 from base64 import b64encode, b64decode
 from hashlib import sha256
@@ -10,7 +10,7 @@ from time import time
 try:
     from urllib import (urlencode, quote)
 except ImportError:
-    from urllib.parse import (urlencode, quote)  # pylint: disable=import-error,no-name-in-module
+    from urllib.parse import (urlencode, quote)  # pylint: disable=import-error
 from msrest.authentication import Authentication
 
 

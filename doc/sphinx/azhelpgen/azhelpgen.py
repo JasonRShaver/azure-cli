@@ -1,7 +1,7 @@
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
 import argparse
 import json
@@ -10,14 +10,15 @@ from docutils.statemachine import ViewList
 from sphinx.util.compat import Directive
 from sphinx.util.nodes import nested_parse_with_titles
 
-from azure.cli.core.application import APPLICATION, Configuration
+from azure.cli.core.application import Application, Configuration
 import azure.cli.core._help as _help
 
-app = APPLICATION
-try:
-    app.execute(['-h'])
-except:
-    pass
+app = Application(Configuration())
+for cmd in app.configuration.get_command_table():
+    try:
+        app.execute(cmd.split() + ['-h'])
+    except:
+        pass
 
 class AzHelpGenDirective(Directive):
     def make_rst(self):
@@ -29,8 +30,11 @@ class AzHelpGenDirective(Directive):
 
         help_files = []
         for cmd, parser in parser_dict.items():
-            help_file = _help.GroupHelpFile(cmd, parser) if _is_group(parser) else _help.CommandHelpFile(cmd, parser) 
-            help_file.load(parser)
+            help_file = _help.GroupHelpFile(cmd, parser) if _is_group(parser) else _help.CommandHelpFile(cmd, parser)
+            try:
+                help_file.load(parser)
+            except Exception as ex:
+                print(ex)
             help_files.append(help_file)
         help_files = sorted(help_files, key=lambda x: x.command)
 
@@ -43,6 +47,10 @@ class AzHelpGenDirective(Directive):
             if not is_command:
                 top_group_name = help_file.command.split()[0] if help_file.command else 'az' 
                 yield '{}:docsource: {}'.format(INDENT, doc_source_map[top_group_name] if top_group_name in doc_source_map else '')
+            else:
+                top_command_name = help_file.command.split()[0] if help_file.command else ''
+                if top_command_name in doc_source_map:
+                    yield '{}:docsource: {}'.format(INDENT, doc_source_map[top_command_name])
             yield ''
 
             if is_command and help_file.parameters:

@@ -1,24 +1,31 @@
 {
-    "$schema": "http://schema.management.azure.com/schemas/2014-04-01-preview/deploymentTemplate.json#",
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
         "registryName": {
             "type": "string",
             "metadata": {
-                "description": "Name of the registry service"
+                "description": "Name of the container registry"
             }
         },
         "registryLocation": {
             "type": "string",
             "metadata": {
-                "description": "Location of the registry service"
+                "description": "Location of the container registry"
+            }
+        },
+        "registrySku": {
+            "type": "string",
+            "defaultValue": "Basic",
+            "metadata": {
+                "description": "Sku of the container registry"
             }
         },
         "registryApiVersion": {
             "type": "string",
-            "defaultValue": "2016-06-27-preview",
+            "defaultValue": "2017-03-01",
             "metadata": {
-                "description": "Api version of the registry service"
+                "description": "Api version of the container registry"
             }
         },
         "storageAccountName": {
@@ -27,10 +34,11 @@
                 "description": "Name of the storage account"
             }
         },
-        "storageAccountType": {
+        "storageAccountSku": {
             "type": "string",
+            "defaultValue": "Standard_LRS",
             "metadata": {
-                "description": "Type of the storage account"
+                "description": "Sku of the storage account"
             }
         },
         "adminUserEnabled": {
@@ -46,17 +54,33 @@
             "name": "[parameters('storageAccountName')]",
             "type": "Microsoft.Storage/storageAccounts",
             "location": "[parameters('registryLocation')]",
-            "apiVersion": "2016-01-01",
-            "sku": {
-                "name": "[parameters('storageAccountType')]"
+            "apiVersion": "2016-12-01",
+            "tags": {
+                "containerregistry": "[parameters('registryName')]"
             },
-            "kind": "Storage"
+            "sku": {
+                "name": "[parameters('storageAccountSku')]"
+            },
+            "kind": "Storage",
+            "properties": {
+                "encryption": {
+                    "services": {
+                        "blob": {
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                }
+            }
         },
         {
             "name": "[parameters('registryName')]",
             "type": "Microsoft.ContainerRegistry/registries",
             "location": "[parameters('registryLocation')]",
             "apiVersion": "[parameters('registryApiVersion')]",
+            "sku": {
+                "name": "[parameters('registrySku')]"
+            },
             "dependsOn": [
                 "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
             ],
@@ -64,7 +88,7 @@
                 "adminUserEnabled": "[parameters('adminUserEnabled')]",
                 "storageAccount": {
                     "name": "[parameters('storageAccountName')]",
-                    "accessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2016-01-01').keys[0].value]"
+                    "accessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2016-12-01').keys[0].value]"
                 }
             }
         }

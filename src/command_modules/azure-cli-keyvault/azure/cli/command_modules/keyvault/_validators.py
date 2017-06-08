@@ -1,7 +1,7 @@
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
 import argparse
 import base64
@@ -13,35 +13,109 @@ from azure.mgmt.keyvault import KeyVaultManagementClient
 from azure.mgmt.keyvault.models.key_vault_management_client_enums import \
     (KeyPermissions, SecretPermissions, CertificatePermissions)
 
-from azure.cli.command_modules.keyvault.keyvaultclient.generated.models.key_vault_client_enums \
-    import JsonWebKeyOperation
-
 from azure.cli.core.commands.client_factory import get_mgmt_service_client
 from azure.cli.core.commands.arm import parse_resource_id
-from azure.cli.core._util import CLIError
+from azure.cli.core.commands.validators import validate_tags
+from azure.cli.core.util import CLIError
+
+from azure.keyvault.models import JsonWebKeyOperation
+
+secret_text_encoding_values = ['utf-8', 'utf-16le', 'utf-16be', 'ascii']
+secret_binary_encoding_values = ['base64', 'hex']
+
 
 def _extract_version(item_id):
     return item_id.split('/')[-1]
 
+
+def _get_resource_group_from_vault_name(vault_name):
+    """
+    Fetch resource group from vault name
+    :param str vault_name: name of the key vault
+    :return: resource group name or None
+    :rtype: str
+    """
+    client = get_mgmt_service_client(KeyVaultManagementClient).vaults
+    for vault in client.list():
+        id_comps = parse_resource_id(vault.id)
+        if id_comps['name'] == vault_name:
+            return id_comps['resource_group']
+    return None
+
+
 # COMMAND NAMESPACE VALIDATORS
+
 
 def process_certificate_cancel_namespace(namespace):
     namespace.cancellation_requested = True
 
+
+def process_secret_set_namespace(namespace):
+    validate_tags(namespace)
+
+    content = namespace.value
+    file_path = namespace.file_path
+    encoding = namespace.encoding
+    tags = namespace.tags or {}
+
+    use_error = CLIError("incorrect usage: [Required] --value VALUE | --file PATH")
+
+    if (content and file_path) or (not content and not file_path):
+        raise use_error
+
+    encoding = encoding or 'utf-8'
+    if file_path:
+        if encoding in secret_text_encoding_values:
+            with open(file_path, 'r') as f:
+                try:
+                    content = f.read()
+                except UnicodeDecodeError:
+                    raise CLIError("Unable to decode file '{}' with '{}' encoding.".format(
+                        file_path, encoding))
+                encoded_str = content
+                encoded = content.encode(encoding)
+                decoded = encoded.decode(encoding)
+        elif encoding == 'base64':
+            with open(file_path, 'rb') as f:
+                content = f.read()
+                try:
+                    encoded = base64.encodebytes(content)
+                except AttributeError:
+                    encoded = base64.encodestring(content)  # pylint: disable=deprecated-method
+                encoded_str = encoded.decode('utf-8')
+                decoded = base64.b64decode(encoded_str)
+        elif encoding == 'hex':
+            with open(file_path, 'rb') as f:
+                content = f.read()
+                encoded = binascii.b2a_hex(content)
+                encoded_str = encoded.decode('utf-8')
+                decoded = binascii.unhexlify(encoded_str)
+
+        if content != decoded:
+            raise CLIError("invalid encoding '{}'".format(encoding))
+
+        content = encoded_str
+
+    tags.update({'file-encoding': encoding})
+    namespace.tags = tags
+    namespace.value = content
+
+
 # PARAMETER NAMESPACE VALIDATORS
 
-def get_attribute_validator(name, attribute_class, create=False):
 
+def get_attribute_validator(name, attribute_class, create=False):
     def validator(ns):
         ns_dict = ns.__dict__
-        enabled = not ns_dict.pop('disabled') if create else ns_dict.pop('enabled') == 'true'
+        enabled = not ns_dict.pop('disabled') if create else ns_dict.pop('enabled')
         attributes = attribute_class(
             enabled,
-            ns_dict.pop('not_before'),
-            ns_dict.pop('expires'))
+            ns_dict.pop('not_before', None),
+            ns_dict.pop('expires', None))
         setattr(ns, '{}_attributes'.format(name), attributes)
 
     return validator
+
 
 def validate_key_import_source(ns):
     byok_file = ns.byok_file
@@ -54,11 +128,13 @@ def validate_key_import_source(ns):
     if pem_password and not pem_file:
         raise ValueError('--pem-password must be used with --pem-file')
 
+
 def validate_key_ops(ns):
     allowed = [x.value.lower() for x in JsonWebKeyOperation]
     for p in ns.key_ops or []:
         if p not in allowed:
             raise ValueError("unrecognized key operation '{}'".format(p))
+
 
 def validate_key_type(ns):
     if ns.destination:
@@ -69,6 +145,7 @@ def validate_key_type(ns):
         ns.destination = dest_to_type_map[ns.destination]
         if ns.destination == 'RSA' and hasattr(ns, 'byok_file') and ns.byok_file:
             raise CLIError('BYOK keys are hardware protected. Omit --protection')
+
 
 def validate_policy_permissions(ns):
     key_perms = ns.key_permissions
@@ -97,24 +174,24 @@ def validate_policy_permissions(ns):
         if p not in cert_allowed:
             raise ValueError("unrecognized cert permission '{}'".format(p))
 
+
 def validate_principal(ns):
     num_set = sum(1 for p in [ns.object_id, ns.spn, ns.upn] if p)
     if num_set != 1:
         raise argparse.ArgumentError(
             None, 'specify exactly one: --object-id, --spn, --upn')
 
+
 def validate_resource_group_name(ns):
     if not ns.resource_group_name:
         vault_name = ns.vault_name
-        client = get_mgmt_service_client(KeyVaultManagementClient).vaults
-        for vault in client.list():
-            id_comps = parse_resource_id(vault.id)
-            if id_comps['name'] == vault_name:
-                ns.resource_group_name = id_comps['resource_group']
-                return
-        raise CLIError(
-            "The Resource 'Microsoft.KeyVault/vaults/{}'".format(vault_name) + \
-            " not found within subscription")
+        group_name = _get_resource_group_from_vault_name(vault_name)
+        if group_name:
+            ns.resource_group_name = group_name
+        else:
+            msg = "The Resource 'Microsoft.KeyVault/vaults/{}' not found within subscription."
+            raise CLIError(msg.format(vault_name))
+
 
 def validate_x509_certificate_chain(ns):
     def _load_certificate_as_bytes(file_name):
@@ -128,23 +205,30 @@ def validate_x509_certificate_chain(ns):
 
     ns.x509_certificates = _load_certificate_as_bytes(ns.x509_certificates)
 
+
 # ARGUMENT TYPES
 
-def base64_encoded_certificate_type(string):
+
+def certificate_type(string):
     """ Loads file and outputs contents as base64 encoded string. """
-    with open(string, 'rb') as f:
+    import os
+    with open(os.path.expanduser(string), 'rb') as f:
         cert_data = f.read()
-    try:
-        # for PEM files (including automatic endline conversion for Windows)
-        cert_data = cert_data.decode('utf-8').replace('\r\n', '\n')
-    except UnicodeDecodeError:
-        cert_data = binascii.b2a_base64(cert_data).decode('utf-8')
     return cert_data
 
+
 def datetime_type(string):
-    """ Validates UTC datettime in format '%Y-%m-%d\'T\'%H:%M\'Z\''. """
-    date_format = '%Y-%m-%dT%H:%MZ'
-    return datetime.strptime(string, date_format)
+    """ Validates UTC datettime in accepted format. Examples: 2017-12-31T01:11:59Z,
+    2017-12-31T01:11Z or 2017-12-31T01Z or 2017-12-31 """
+    accepted_date_formats = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%MZ',
+                             '%Y-%m-%dT%HZ', '%Y-%m-%d']
+    for form in accepted_date_formats:
+        try:
+            return datetime.strptime(string, form)
+        except ValueError:  # checks next format
+            pass
+    raise ValueError("Input '{}' not valid. Valid example: 2000-12-31T12:59:59Z".format(string))
+
 
 def vault_base_url_type(name):
     from azure.cli.core._profile import CLOUD

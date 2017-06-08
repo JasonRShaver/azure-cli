@@ -1,9 +1,10 @@
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
 import collections
+
 
 def jmespath_type(raw_query):
     '''Compile the query with JMESPath and return the compiled result.
@@ -18,24 +19,26 @@ def jmespath_type(raw_query):
         # Raise a ValueError which argparse can handle
         raise ValueError
 
+
 def _register_global_parameter(global_group):
     # Argparse uses __name__ of the function used for 'type' when generating error message.
     # We set __name__ for our function here.
     jmespath_type.__name__ = 'query'
     # Let the program know that we are adding a parameter --query
     global_group.add_argument('--query', dest='_jmespath_query', metavar='JMESPATH',
-                              help='JMESPath query string. See http://jmespath.org/ for more'\
+                              help='JMESPath query string. See http://jmespath.org/ for more'
                                    ' information and examples.',
                               type=jmespath_type)
+
 
 def register(application):
     def handle_query_parameter(**kwargs):
         args = kwargs['args']
-        query_expression = args._jmespath_query # pylint: disable=protected-access
+        query_expression = args._jmespath_query  # pylint: disable=protected-access
         del args._jmespath_query
         if query_expression:
             def filter_output(**kwargs):
-                from jmespath import search, Options
+                from jmespath import Options
                 kwargs['event_data']['result'] = query_expression.search(
                     kwargs['event_data']['result'], Options(collections.OrderedDict))
                 application.remove(application.FILTER_RESULT, filter_output)
@@ -44,4 +47,3 @@ def register(application):
 
     application.register(application.GLOBAL_PARSER_CREATED, _register_global_parameter)
     application.register(application.COMMAND_PARSER_PARSED, handle_query_parameter)
-

@@ -1,7 +1,7 @@
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
 # Verify that all *.py files have a license header in the file.
 
@@ -10,7 +10,7 @@ import sys
 
 from _common import get_files_without_header
 
-files_without_header = [file_path for file_path, file_contents in get_files_without_header()]
+files_without_header = [file_path for file_path, file_contents in get_files_without_header() if not file_path.endswith('azure_bdist_wheel.py')]
 
 if files_without_header:
     print("Error: The following files don't have the required license headers:", file=sys.stderr)

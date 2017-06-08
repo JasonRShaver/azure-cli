@@ -1,206 +1,297 @@
-﻿#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-#---------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
-from azure.mgmt.compute.operations import (
-    AvailabilitySetsOperations,
-    VirtualMachineExtensionImagesOperations,
-    VirtualMachineExtensionsOperations,
-    VirtualMachineImagesOperations,
-    UsageOperations,
-    VirtualMachineSizesOperations,
-    VirtualMachinesOperations,
-    VirtualMachineScaleSetsOperations,
-    VirtualMachineScaleSetVMsOperations,
-    ContainerServicesOperations)
-from azure.mgmt.network.operations import NetworkInterfacesOperations
-from azure.mgmt.network import NetworkManagementClient
+from collections import OrderedDict
+
+from azure.cli.command_modules.vm._client_factory import (cf_vm, cf_avail_set, cf_ni,
+                                                          cf_vm_ext,
+                                                          cf_vm_ext_image, cf_vm_image, cf_usage,
+                                                          cf_vmss, cf_vmss_vm,
+                                                          cf_vm_sizes, cf_disks, cf_snapshots,
+                                                          cf_images)
 from azure.cli.core.commands import DeploymentOutputLongRunningOperation, cli_command
-from azure.cli.core.commands.arm import cli_generic_update_command
-from azure.cli.core.commands.client_factory import get_mgmt_service_client
-from azure.cli.command_modules.vm.mgmt_avail_set.lib import (AvailSetCreationClient
-                                                             as AvailSetClient)
-from azure.cli.command_modules.vm.mgmt_avail_set.lib.operations import AvailSetOperations
-from azure.cli.command_modules.vm.mgmt_vm.lib import VmCreationClient as VMClient
-from azure.cli.command_modules.vm.mgmt_vm.lib.operations import VmOperations
-from azure.cli.command_modules.vm.mgmt_vmss.lib import VmssCreationClient as VMSSClient
-from azure.cli.command_modules.vm.mgmt_vmss.lib.operations import VmssOperations
-from azure.cli.command_modules.vm.mgmt_acs.lib import AcsCreationClient as ACSClient
-from azure.cli.command_modules.vm.mgmt_acs.lib.operations import AcsOperations
-from .custom import (
-    list_vm, resize_vm, list_vm_images, list_vm_extension_images, list_ip_addresses,
-    list_container_services,
-    attach_new_disk, attach_existing_disk, detach_disk, list_disks, capture_vm, get_instance_view,
-    vm_update_nics, vm_delete_nics, vm_add_nics, vm_open_port,
-    reset_windows_admin, set_linux_user, delete_linux_user,
-    disable_boot_diagnostics, enable_boot_diagnostics, get_boot_log,
-    list_extensions, set_extension, set_diagnostics_extension,
-    show_default_diagnostics_configuration,
-    vmss_start, vmss_restart, vmss_delete_instances, vmss_deallocate, vmss_get_instance_view,
-    vmss_stop, vmss_reimage, vmss_scale, vmss_update_instances, vmss_show, vmss_list,
-    set_vmss_diagnostics_extension, set_vmss_extension, get_vmss_extension,
-    list_vmss_extensions, delete_vmss_extension, update_acs)
-
-
-from ._factory import _compute_client_factory
+from azure.cli.core.commands.arm import cli_generic_update_command, cli_generic_wait_command
+from azure.cli.core.util import empty_on_404
+from azure.cli.core.profiles import supported_api_version, ResourceType
 
 # pylint: disable=line-too-long
 
+custom_path = 'azure.cli.command_modules.vm.custom#{}'
+mgmt_path = 'azure.mgmt.compute.compute.operations.{}#{}.{}'
+
+
 # VM
-def get_vm_client_with_shorter_polling_interval(_):
-    client = get_mgmt_service_client(VMClient)
-    client.config.long_running_operation_timeout = 5 #seconds
-    return client.vm
+def transform_ip_addresses(result):
+    transformed = []
+    for r in result:
+        network = r['virtualMachine']['network']
+        public = network.get('publicIpAddresses')
+        public_ip_addresses = ','.join([p['ipAddress'] for p in public if p['ipAddress']]) if public else None
+        private = network.get('privateIpAddresses')
+        private_ip_addresses = ','.join(private) if private else None
+        entry = OrderedDict([('virtualMachine', r['virtualMachine']['name']),
+                             ('publicIPAddresses', public_ip_addresses),
+                             ('privateIPAddresses', private_ip_addresses)])
+        transformed.append(entry)
 
-cli_command('vm create', VmOperations.create_or_update, get_vm_client_with_shorter_polling_interval, transform=DeploymentOutputLongRunningOperation('Starting vm create'))
+    return transformed
 
-factory = lambda _: _compute_client_factory().virtual_machines
 
-cli_command('vm delete', VirtualMachinesOperations.delete, factory)
-cli_command('vm deallocate', VirtualMachinesOperations.deallocate, factory)
-cli_command('vm generalize', VirtualMachinesOperations.generalize, factory)
-cli_command('vm show', VirtualMachinesOperations.get, factory)
-cli_command('vm list-vm-resize-options', VirtualMachinesOperations.list_available_sizes, factory)
-cli_command('vm get-instance-view', get_instance_view)
-cli_command('vm stop', VirtualMachinesOperations.power_off, factory)
-cli_command('vm restart', VirtualMachinesOperations.restart, factory)
-cli_command('vm start', VirtualMachinesOperations.start, factory)
-cli_command('vm redeploy', VirtualMachinesOperations.redeploy, factory)
-cli_command('vm list-ip-addresses', list_ip_addresses)
-cli_command('vm list', list_vm)
-cli_command('vm resize', resize_vm)
-cli_command('vm capture', capture_vm)
-cli_command('vm open-port', vm_open_port)
-cli_generic_update_command('vm update', VirtualMachinesOperations.get, VirtualMachinesOperations.create_or_update, factory)
+def transform_vm(result):
+    return OrderedDict([('name', result['name']),
+                        ('resourceGroup', result['resourceGroup']),
+                        ('powerState', result.get('powerState')),
+                        ('publicIps', result.get('publicIps')),
+                        ('fqdns', result.get('fqdns')),
+                        ('location', result['location'])])
+
+
+def transform_vm_create_output(result):
+    from azure.cli.core.commands.arm import parse_resource_id
+    try:
+        return OrderedDict([('id', result.id),
+                            ('resourceGroup', getattr(result, 'resource_group', None) or parse_resource_id(result.id)['resource_group']),
+                            ('powerState', result.power_state),
+                            ('publicIpAddress', result.public_ips),
+                            ('fqdns', result.fqdns),
+                            ('privateIpAddress', result.private_ips),
+                            ('macAddress', result.mac_addresses),
+                            ('location', result.location)])
+    except AttributeError:
+        from msrest.pipeline import ClientRawResponse
+        return None if isinstance(result, ClientRawResponse) else result
+
+
+def transform_vm_usage_list(result):
+    result = list(result)
+    for item in result:
+        item.current_value = str(item.current_value)
+        item.limit = str(item.limit)
+        item.local_name = item.name.localized_value
+    return result
+
+
+def transform_vm_list(vm_list):
+    return [transform_vm(v) for v in vm_list]
+
+
+def transform_av_set_output(av_set):
+    # workaround till compute api version gets to 2017-04-30
+    if hasattr(av_set, 'sku') and hasattr(av_set.sku, 'name'):
+        setattr(av_set.sku, 'managed', av_set.sku.name == 'Aligned')
+        del av_set.sku.name
+    return av_set
+
+
+def transform_av_set_collection_output(av_sets):
+    av_sets = list(av_sets)
+    for av_set in av_sets:
+        transform_av_set_output(av_set)
+    return av_sets
+
+
+op_var = 'virtual_machines_operations'
+op_class = 'VirtualMachinesOperations'
+cli_command(__name__, 'vm create', custom_path.format('create_vm'), transform=transform_vm_create_output, no_wait_param='no_wait')
+cli_command(__name__, 'vm delete', mgmt_path.format(op_var, op_class, 'delete'), cf_vm, confirmation=True, no_wait_param='raw')
+cli_command(__name__, 'vm deallocate', mgmt_path.format(op_var, op_class, 'deallocate'), cf_vm, no_wait_param='raw')
+cli_command(__name__, 'vm generalize', mgmt_path.format(op_var, op_class, 'generalize'), cf_vm, no_wait_param='raw')
+cli_command(__name__, 'vm show', custom_path.format('show_vm'), table_transformer=transform_vm, exception_handler=empty_on_404)
+cli_command(__name__, 'vm list-vm-resize-options', mgmt_path.format(op_var, op_class, 'list_available_sizes'), cf_vm)
+cli_command(__name__, 'vm stop', mgmt_path.format(op_var, op_class, 'power_off'), cf_vm, no_wait_param='raw')
+cli_command(__name__, 'vm restart', mgmt_path.format(op_var, op_class, 'restart'), cf_vm, no_wait_param='raw')
+cli_command(__name__, 'vm start', mgmt_path.format(op_var, op_class, 'start'), cf_vm, no_wait_param='raw')
+cli_command(__name__, 'vm redeploy', mgmt_path.format(op_var, op_class, 'redeploy'), cf_vm, no_wait_param='raw')
+cli_command(__name__, 'vm list-ip-addresses', custom_path.format('list_ip_addresses'), table_transformer=transform_ip_addresses)
+cli_command(__name__, 'vm get-instance-view', custom_path.format('get_instance_view'),
+            table_transformer='{Name:name, ResourceGroup:resourceGroup, Location:location, ProvisioningState:provisioningState, PowerState:instanceView.statuses[1].displayStatus}')
+cli_command(__name__, 'vm list', custom_path.format('list_vm'), table_transformer=transform_vm_list)
+cli_command(__name__, 'vm resize', custom_path.format('resize_vm'), no_wait_param='no_wait')
+cli_command(__name__, 'vm capture', custom_path.format('capture_vm'))
+cli_command(__name__, 'vm open-port', custom_path.format('vm_open_port'))
+cli_command(__name__, 'vm format-secret', custom_path.format('get_vm_format_secret'))
+cli_generic_update_command(__name__, 'vm update',
+                           mgmt_path.format(op_var, op_class, 'get'),
+                           mgmt_path.format(op_var, op_class, 'create_or_update'),
+                           cf_vm,
+                           no_wait_param='raw')
+cli_generic_wait_command(__name__, 'vm wait', 'azure.cli.command_modules.vm.custom#get_instance_view')
+
+if supported_api_version(ResourceType.MGMT_COMPUTE, min_api='2016-04-30-preview'):
+    cli_command(__name__, 'vm convert', mgmt_path.format(op_var, op_class, 'convert_to_managed_disks'), cf_vm)
+
+    # VM encryption
+    cli_command(__name__, 'vm encryption enable', 'azure.cli.command_modules.vm.disk_encryption#enable')
+    cli_command(__name__, 'vm encryption disable', 'azure.cli.command_modules.vm.disk_encryption#disable')
+    cli_command(__name__, 'vm encryption show', 'azure.cli.command_modules.vm.disk_encryption#show', exception_handler=empty_on_404)
 
 # VM NIC
-cli_command('vm nic add', vm_add_nics)
-cli_command('vm nic delete', vm_delete_nics)
-cli_command('vm nic update', vm_update_nics)
+cli_command(__name__, 'vm nic add', custom_path.format('vm_add_nics'))
+cli_command(__name__, 'vm nic remove', custom_path.format('vm_remove_nics'))
+cli_command(__name__, 'vm nic set', custom_path.format('vm_set_nics'))
+cli_command(__name__, 'vm nic show', custom_path.format('vm_show_nic'), exception_handler=empty_on_404)
+cli_command(__name__, 'vm nic list', custom_path.format('vm_list_nics'))
 
 # VMSS NIC
-# TODO: Remove hard coded api-version once https://github.com/Azure/azure-rest-api-specs/issues/570
-# is fixed.
-factory = lambda _: get_mgmt_service_client(NetworkManagementClient, api_version='2016-03-30').network_interfaces
-cli_command('vmss nic list', NetworkInterfacesOperations.list_virtual_machine_scale_set_network_interfaces, factory)
-cli_command('vmss nic list-vm-nics', NetworkInterfacesOperations.list_virtual_machine_scale_set_vm_network_interfaces, factory)
-cli_command('vmss nic show', NetworkInterfacesOperations.get_virtual_machine_scale_set_network_interface, factory)
+cli_command(__name__, 'vmss nic list', 'azure.mgmt.network.operations.network_interfaces_operations#NetworkInterfacesOperations.list_virtual_machine_scale_set_network_interfaces', cf_ni)
+cli_command(__name__, 'vmss nic list-vm-nics', 'azure.mgmt.network.operations.network_interfaces_operations#NetworkInterfacesOperations.list_virtual_machine_scale_set_vm_network_interfaces', cf_ni)
+cli_command(__name__, 'vmss nic show', 'azure.mgmt.network.operations.network_interfaces_operations#NetworkInterfacesOperations.get_virtual_machine_scale_set_network_interface', cf_ni, exception_handler=empty_on_404)
 
 # VM Access
-cli_command('vm access set-linux-user', set_linux_user)
-cli_command('vm access delete-linux-user', delete_linux_user)
-cli_command('vm access reset-windows-admin', reset_windows_admin)
+cli_command(__name__, 'vm user update', custom_path.format('set_user'), no_wait_param='no_wait')
+cli_command(__name__, 'vm user delete', custom_path.format('delete_user'), no_wait_param='no_wait')
+cli_command(__name__, 'vm user reset-ssh', custom_path.format('reset_linux_ssh'), no_wait_param='no_wait')
 
-# VM Availability Set
-factory = lambda _: get_mgmt_service_client(AvailSetClient).avail_set
-cli_command('vm availability-set create', AvailSetOperations.create_or_update, factory)
+# # VM Availability Set
+cli_command(__name__, 'vm availability-set create', custom_path.format('create_av_set'), transform=transform_av_set_output)
 
-factory = lambda _: _compute_client_factory().availability_sets
-cli_command('vm availability-set delete', AvailabilitySetsOperations.delete, factory)
-cli_command('vm availability-set show', AvailabilitySetsOperations.get, factory)
-cli_command('vm availability-set list', AvailabilitySetsOperations.list, factory)
-cli_command('vm availability-set list-sizes', AvailabilitySetsOperations.list_available_sizes, factory)
+op_var = 'availability_sets_operations'
+op_class = 'AvailabilitySetsOperations'
+cli_command(__name__, 'vm availability-set delete', mgmt_path.format(op_var, op_class, 'delete'), cf_avail_set)
+cli_command(__name__, 'vm availability-set show', mgmt_path.format(op_var, op_class, 'get'), cf_avail_set, transform=transform_av_set_output, exception_handler=empty_on_404)
+cli_command(__name__, 'vm availability-set list', mgmt_path.format(op_var, op_class, 'list'), cf_avail_set, transform=transform_av_set_collection_output)
+cli_command(__name__, 'vm availability-set list-sizes', mgmt_path.format(op_var, op_class, 'list_available_sizes'), cf_avail_set)
+cli_command(__name__, 'vm availability-set convert', custom_path.format('convert_av_set_to_managed_disk'))
+
+cli_generic_update_command(__name__, 'vm availability-set update',
+                           custom_path.format('availset_get'),
+                           custom_path.format('availset_set'))
+
+cli_generic_update_command(__name__, 'vmss update',
+                           custom_path.format('vmss_get'),
+                           custom_path.format('vmss_set'),
+                           no_wait_param='no_wait')
+cli_generic_wait_command(__name__, 'vmss wait', custom_path.format('vmss_get'))
 
 # VM Boot Diagnostics
-cli_command('vm boot-diagnostics disable', disable_boot_diagnostics)
-cli_command('vm boot-diagnostics enable', enable_boot_diagnostics)
-cli_command('vm boot-diagnostics get-boot-log', get_boot_log)
-
-# VM Container (ACS)
-factory = lambda _: get_mgmt_service_client(ACSClient).acs
-cli_command('acs create', AcsOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting container service create'))
-
-factory = lambda _: _compute_client_factory().container_services
-#Remove the hack after https://github.com/Azure/azure-rest-api-specs/issues/352 fixed
-from azure.mgmt.compute.models import ContainerService#pylint: disable=wrong-import-position
-for a in ['id', 'name', 'type', 'location']:
-    ContainerService._attribute_map[a]['type'] = 'str'#pylint: disable=protected-access
-ContainerService._attribute_map['tags']['type'] = '{str}'#pylint: disable=protected-access
-######
-cli_command('acs show', ContainerServicesOperations.get, factory)
-cli_command('acs list', list_container_services, factory)
-cli_command('acs delete', ContainerServicesOperations.delete, factory)
-cli_command('acs scale', update_acs)
-#Per conversation with ACS team, hide the update till we have something meaningful to tweak
-#cli_generic_update_command('acs update', ContainerServicesOperations.get, ContainerServiceOperations.create_or_update, factory)
+cli_command(__name__, 'vm boot-diagnostics disable', custom_path.format('disable_boot_diagnostics'))
+cli_command(__name__, 'vm boot-diagnostics enable', custom_path.format('enable_boot_diagnostics'))
+cli_command(__name__, 'vm boot-diagnostics get-boot-log', custom_path.format('get_boot_log'))
 
 # VM Diagnostics
-cli_command('vm diagnostics set', set_diagnostics_extension)
-cli_command('vm diagnostics get-default-config', show_default_diagnostics_configuration)
+cli_command(__name__, 'vm diagnostics set', custom_path.format('set_diagnostics_extension'))
+cli_command(__name__, 'vm diagnostics get-default-config', custom_path.format('show_default_diagnostics_configuration'))
 
 # VMSS Diagnostics
-cli_command('vmss diagnostics set', set_vmss_diagnostics_extension)
-cli_command('vmss diagnostics get-default-config', show_default_diagnostics_configuration)
+cli_command(__name__, 'vmss diagnostics set', custom_path.format('set_vmss_diagnostics_extension'))
+cli_command(__name__, 'vmss diagnostics get-default-config', custom_path.format('show_default_diagnostics_configuration'))
 
-# VM Disk
-cli_command('vm disk attach-new', attach_new_disk)
-cli_command('vm disk attach-existing', attach_existing_disk)
-cli_command('vm disk detach', detach_disk)
-cli_command('vm disk list', list_disks)
+
+cli_command(__name__, 'vm disk attach', custom_path.format('attach_managed_data_disk'))
+cli_command(__name__, 'vm disk detach', custom_path.format('detach_data_disk'))
+
+cli_command(__name__, 'vmss disk attach', custom_path.format('attach_managed_data_disk_to_vmss'))
+cli_command(__name__, 'vmss disk detach', custom_path.format('detach_disk_from_vmss'))
+
+cli_command(__name__, 'vm unmanaged-disk attach', custom_path.format('attach_unmanaged_data_disk'))
+cli_command(__name__, 'vm unmanaged-disk detach', custom_path.format('detach_data_disk'))
+cli_command(__name__, 'vm unmanaged-disk list', custom_path.format('list_unmanaged_disks'))
 
 # VM Extension
-factory = lambda _: _compute_client_factory().virtual_machine_extensions
-cli_command('vm extension delete', VirtualMachineExtensionsOperations.delete, factory)
-cli_command('vm extension show', VirtualMachineExtensionsOperations.get, factory)
-cli_command('vm extension set', set_extension)
-cli_command('vm extension list', list_extensions)
+op_var = 'virtual_machine_extensions_operations'
+op_class = 'VirtualMachineExtensionsOperations'
+cli_command(__name__, 'vm extension delete', mgmt_path.format(op_var, op_class, 'delete'), cf_vm_ext)
+_extension_show_transform = '{Name:name, ProvisioningState:provisioningState, Publisher:publisher, Version:typeHandlerVersion, AutoUpgradeMinorVersion:autoUpgradeMinorVersion}'
+cli_command(__name__, 'vm extension show', mgmt_path.format(op_var, op_class, 'get'), cf_vm_ext, exception_handler=empty_on_404,
+            table_transformer=_extension_show_transform)
+cli_command(__name__, 'vm extension set', custom_path.format('set_extension'))
+cli_command(__name__, 'vm extension list', custom_path.format('list_extensions'),
+            table_transformer='[].' + _extension_show_transform)
 
 # VMSS Extension
-cli_command('vmss extension delete', delete_vmss_extension)
-cli_command('vmss extension show', get_vmss_extension)
-cli_command('vmss extension set', set_vmss_extension)
-cli_command('vmss extension list', list_vmss_extensions)
+cli_command(__name__, 'vmss extension delete', custom_path.format('delete_vmss_extension'))
+cli_command(__name__, 'vmss extension show', custom_path.format('get_vmss_extension'), exception_handler=empty_on_404)
+cli_command(__name__, 'vmss extension set', custom_path.format('set_vmss_extension'))
+cli_command(__name__, 'vmss extension list', custom_path.format('list_vmss_extensions'))
 
 # VM Extension Image
-factory = lambda _: _compute_client_factory().virtual_machine_extension_images
-cli_command('vm extension image show', VirtualMachineExtensionImagesOperations.get, factory)
-cli_command('vm extension image list-names', VirtualMachineExtensionImagesOperations.list_types, factory)
-cli_command('vm extension image list-versions', VirtualMachineExtensionImagesOperations.list_versions, factory)
-cli_command('vm extension image list', list_vm_extension_images)
+op_var = 'virtual_machine_extension_images_operations'
+op_class = 'VirtualMachineExtensionImagesOperations'
+cli_command(__name__, 'vm extension image show', mgmt_path.format(op_var, op_class, 'get'), cf_vm_ext_image, exception_handler=empty_on_404)
+cli_command(__name__, 'vm extension image list-names', mgmt_path.format(op_var, op_class, 'list_types'), cf_vm_ext_image)
+cli_command(__name__, 'vm extension image list-versions', mgmt_path.format(op_var, op_class, 'list_versions'), cf_vm_ext_image)
+cli_command(__name__, 'vm extension image list', custom_path.format('list_vm_extension_images'))
 
 # VMSS Extension Image (convenience copy of VM Extension Image)
-factory = lambda _: _compute_client_factory().virtual_machine_extension_images
-cli_command('vmss extension image show', VirtualMachineExtensionImagesOperations.get, factory)
-cli_command('vmss extension image list-names', VirtualMachineExtensionImagesOperations.list_types, factory)
-cli_command('vmss extension image list-versions', VirtualMachineExtensionImagesOperations.list_versions, factory)
-cli_command('vmss extension image list', list_vm_extension_images)
+cli_command(__name__, 'vmss extension image show', mgmt_path.format(op_var, op_class, 'get'), cf_vm_ext_image, exception_handler=empty_on_404)
+cli_command(__name__, 'vmss extension image list-names', mgmt_path.format(op_var, op_class, 'list_types'), cf_vm_ext_image)
+cli_command(__name__, 'vmss extension image list-versions', mgmt_path.format(op_var, op_class, 'list_versions'), cf_vm_ext_image)
+cli_command(__name__, 'vmss extension image list', custom_path.format('list_vm_extension_images'))
 
 # VM Image
-factory = lambda _: _compute_client_factory().virtual_machine_images
-cli_command('vm image show', VirtualMachineImagesOperations.get, factory)
-cli_command('vm image list-offers', VirtualMachineImagesOperations.list_offers, factory)
-cli_command('vm image list-publishers', VirtualMachineImagesOperations.list_publishers, factory)
-cli_command('vm image list-skus', VirtualMachineImagesOperations.list_skus, factory)
-cli_command('vm image list', list_vm_images)
+op_var = 'virtual_machine_images_operations'
+op_class = 'VirtualMachineImagesOperations'
+cli_command(__name__, 'vm image show', mgmt_path.format(op_var, op_class, 'get'), cf_vm_image, exception_handler=empty_on_404)
+cli_command(__name__, 'vm image list-offers', mgmt_path.format(op_var, op_class, 'list_offers'), cf_vm_image)
+cli_command(__name__, 'vm image list-publishers', mgmt_path.format(op_var, op_class, 'list_publishers'), cf_vm_image)
+cli_command(__name__, 'vm image list-skus', mgmt_path.format(op_var, op_class, 'list_skus'), cf_vm_image)
+cli_command(__name__, 'vm image list', custom_path.format('list_vm_images'))
 
 # VM Usage
-factory = lambda _: _compute_client_factory().usage
-cli_command('vm list-usage', UsageOperations.list, factory)
+cli_command(__name__, 'vm list-usage', mgmt_path.format('usage_operations', 'UsageOperations', 'list'), cf_usage, transform=transform_vm_usage_list,
+            table_transformer='[].{Name:localName, CurrentValue:currentValue, Limit:limit}')
 
-# VM ScaleSet
-factory = lambda _: get_mgmt_service_client(VMSSClient).vmss
-cli_command('vmss create', VmssOperations.create_or_update, factory, transform=DeploymentOutputLongRunningOperation('Starting vmss create'))
+# VMSS
+vmss_show_table_transform = '{Name:name, ResourceGroup:resourceGroup, Location:location, Capacity:sku.capacity, Overprovision:overprovision, upgradePolicy:upgradePolicy.mode}'
+cli_command(__name__, 'vmss delete', mgmt_path.format('virtual_machine_scale_sets_operations', 'VirtualMachineScaleSetsOperations', 'delete'), cf_vmss, no_wait_param='raw')
+cli_command(__name__, 'vmss list-skus', mgmt_path.format('virtual_machine_scale_sets_operations', 'VirtualMachineScaleSetsOperations', 'list_skus'), cf_vmss)
 
-factory = lambda _: _compute_client_factory().virtual_machine_scale_sets
-cli_command('vmss delete', VirtualMachineScaleSetsOperations.delete, factory)
-cli_command('vmss list-skus', VirtualMachineScaleSetsOperations.list_skus, factory)
+cli_command(__name__, 'vmss list-instances', mgmt_path.format('virtual_machine_scale_set_vms_operations', 'VirtualMachineScaleSetVMsOperations', 'list'), cf_vmss_vm)
 
-factory = lambda _: _compute_client_factory().virtual_machine_scale_set_vms
-cli_command('vmss list-instances', VirtualMachineScaleSetVMsOperations.list, factory)
-
-cli_command('vmss deallocate', vmss_deallocate)
-cli_command('vmss delete-instances', vmss_delete_instances)
-cli_command('vmss get-instance-view', vmss_get_instance_view)
-cli_command('vmss show', vmss_show)
-cli_command('vmss list ', vmss_list)
-cli_command('vmss stop', vmss_stop)
-cli_command('vmss restart', vmss_restart)
-cli_command('vmss start', vmss_start)
-cli_command('vmss update-instances', vmss_update_instances)
-cli_command('vmss reimage', vmss_reimage)
-cli_command('vmss scale', vmss_scale)
+cli_command(__name__, 'vmss create', custom_path.format('create_vmss'), transform=DeploymentOutputLongRunningOperation('Starting vmss create'), no_wait_param='no_wait')
+cli_command(__name__, 'vmss deallocate', custom_path.format('deallocate_vmss'), no_wait_param='no_wait')
+cli_command(__name__, 'vmss delete-instances', custom_path.format('delete_vmss_instances'), no_wait_param='no_wait')
+cli_command(__name__, 'vmss get-instance-view', custom_path.format('get_vmss_instance_view'),
+            table_transformer='{ProvisioningState:statuses[0].displayStatus, PowerState:statuses[1].displayStatus}')
+cli_command(__name__, 'vmss show', custom_path.format('show_vmss'), exception_handler=empty_on_404,
+            table_transformer=vmss_show_table_transform)
+cli_command(__name__, 'vmss list', custom_path.format('list_vmss'), table_transformer='[].' + vmss_show_table_transform)
+cli_command(__name__, 'vmss stop', custom_path.format('stop_vmss'), no_wait_param='no_wait')
+cli_command(__name__, 'vmss restart', custom_path.format('restart_vmss'), no_wait_param='no_wait')
+cli_command(__name__, 'vmss start', custom_path.format('start_vmss'), no_wait_param='no_wait')
+cli_command(__name__, 'vmss update-instances', custom_path.format('update_vmss_instances'), no_wait_param='no_wait')
+cli_command(__name__, 'vmss reimage', custom_path.format('reimage_vmss'), no_wait_param='no_wait')
+cli_command(__name__, 'vmss scale', custom_path.format('scale_vmss'), no_wait_param='no_wait')
+cli_command(__name__, 'vmss list-instance-connection-info', custom_path.format('list_vmss_instance_connection_info'))
 
 # VM Size
-factory = lambda _: _compute_client_factory().virtual_machine_sizes
-cli_command('vm list-sizes', VirtualMachineSizesOperations.list, factory)
+cli_command(__name__, 'vm list-sizes', mgmt_path.format('virtual_machine_sizes_operations', 'VirtualMachineSizesOperations', 'list'), cf_vm_sizes)
+
+
+if supported_api_version(ResourceType.MGMT_COMPUTE, min_api='2016-04-30-preview'):
+    # VM Disk
+    op_var = 'disks_operations'
+    op_class = 'DisksOperations'
+    cli_command(__name__, 'disk create', custom_path.format('create_managed_disk'), no_wait_param='no_wait')
+    cli_command(__name__, 'disk list', custom_path.format('list_managed_disks'))
+    cli_command(__name__, 'disk show', mgmt_path.format(op_var, op_class, 'get'), cf_disks, exception_handler=empty_on_404)
+    cli_command(__name__, 'disk delete', mgmt_path.format(op_var, op_class, 'delete'), cf_disks, no_wait_param='raw', confirmation=True)
+    cli_command(__name__, 'disk grant-access', custom_path.format('grant_disk_access'))
+    cli_command(__name__, 'disk revoke-access', mgmt_path.format(op_var, op_class, 'revoke_access'), cf_disks)
+    cli_generic_update_command(__name__, 'disk update', 'azure.mgmt.compute.compute.operations.{}#{}.get'.format(op_var, op_class),
+                               'azure.mgmt.compute.compute.operations.{}#{}.create_or_update'.format(op_var, op_class),
+                               custom_function_op=custom_path.format('update_managed_disk'),
+                               setter_arg_name='disk', factory=cf_disks, no_wait_param='raw')
+    cli_generic_wait_command(__name__, 'disk wait', 'azure.mgmt.compute.compute.operations.{}#{}.get'.format(op_var, op_class), cf_disks)
+
+    op_var = 'snapshots_operations'
+    op_class = 'SnapshotsOperations'
+    cli_command(__name__, 'snapshot create', custom_path.format('create_snapshot'))
+    cli_command(__name__, 'snapshot list', custom_path.format('list_snapshots'))
+    cli_command(__name__, 'snapshot show', mgmt_path.format(op_var, op_class, 'get'), cf_snapshots, exception_handler=empty_on_404)
+    cli_command(__name__, 'snapshot delete', mgmt_path.format(op_var, op_class, 'delete'), cf_snapshots)
+    cli_command(__name__, 'snapshot grant-access', custom_path.format('grant_snapshot_access'))
+    cli_command(__name__, 'snapshot revoke-access', mgmt_path.format(op_var, op_class, 'revoke_access'), cf_snapshots)
+    cli_generic_update_command(__name__, 'snapshot update', 'azure.mgmt.compute.compute.operations.{}#{}.get'.format(op_var, op_class),
+                               'azure.mgmt.compute.compute.operations.{}#{}.create_or_update'.format(op_var, op_class),
+                               custom_function_op=custom_path.format('update_snapshot'),
+                               setter_arg_name='snapshot', factory=cf_snapshots)
+
+    op_var = 'images_operations'
+    op_class = 'ImagesOperations'
+    cli_command(__name__, 'image create', custom_path.format('create_image'))
+    cli_command(__name__, 'image list', custom_path.format('list_images'))
+    cli_command(__name__, 'image show', mgmt_path.format(op_var, op_class, 'get'), cf_images, exception_handler=empty_on_404)
+    cli_command(__name__, 'image delete', mgmt_path.format(op_var, op_class, 'delete'), cf_images)
