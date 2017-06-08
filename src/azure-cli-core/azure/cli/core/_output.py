@@ -14,6 +14,7 @@ from collections import OrderedDict
 from six import StringIO, text_type, u, string_types
 import colorama
 from tabulate import tabulate
+import pandas as pd
 
 from azure.cli.core.util import CLIError
 import azure.cli.core.azlogging as azlogging
@@ -85,6 +86,26 @@ def format_tsv(obj):
     result_list = result if isinstance(result, list) else [result]
     return TsvOutput.dump(result_list)
 
+def format_pandas(obj):
+    result = obj.result
+    try:
+        if obj.table_transformer and not obj.is_query_active:
+            if isinstance(obj.table_transformer, str):
+                from jmespath import compile as compile_jmes, Options
+                result = compile_jmes(obj.table_transformer).search(result, Options(OrderedDict))
+            else:
+                result = obj.table_transformer(result)
+        result_list = result if isinstance(result, list) else [result]
+        should_sort_keys = not obj.is_query_active and not obj.table_transformer
+        po = PandasOutput(should_sort_keys)
+        return po.dump(result_list)
+    except:
+        logger.debug(traceback.format_exc())
+        raise CLIError("Pandas output unavailable. "
+                       "Use the --query option to specify an appropriate query. "
+                       "Use --debug for more info.")
+#    raise CLIError("Pandas data frames not supported yet.")
+
 
 class CommandResultItem(object):  # pylint: disable=too-few-public-methods
 
@@ -102,6 +123,7 @@ class OutputProducer(object):  # pylint: disable=too-few-public-methods
         'table': format_table,
         'text': format_text,
         'tsv': format_tsv,
+        'pandas': format_pandas,
     }
 
     def __init__(self, formatter, file=sys.stdout):  # pylint: disable=redefined-builtin
@@ -255,3 +277,50 @@ class TsvOutput(object):  # pylint: disable=too-few-public-methods
         result = io.getvalue()
         io.close()
         return result
+
+class PandasOutput(object): # pylint: disable=too-few-public-methods
+    SKIP_KEYS = ['id', 'type', 'etag']
+
+    def __init__(self, should_sort_keys=False):
+        self.should_sort_keys = should_sort_keys
+
+    def _create_table_item(self, item):
+        new_entry = OrderedDict()
+        try:
+            keys = sorted(item) if self.should_sort_keys and isinstance(item, dict) else item.keys()
+            for k in keys:
+                if k in PandasOutput.SKIP_KEYS:
+                    continue
+                if item[k] and not isinstance(item[k], (list, dict, set)):
+                    new_entry[k] = item[k]
+        except AttributeError:
+            # handles odd cases where a string/bool/etc. is returned
+            if isinstance(item, list):
+                for col, val in enumerate(item):
+                    new_entry['Column{}'.format(col + 1)] = val
+            else:
+                new_entry['Result'] = item
+        return new_entry
+
+    def _create_table(self, result):
+        if isinstance(result, list):
+            new_result = []
+            for item in result:
+                new_result.append(self._create_table_item(item))
+            return new_result
+        return self._create_table(result)
+
+
+    def dump(self, data):
+
+        #if isinstance(result, list):
+        #    df = pd.DataFrame(result)
+
+        table_data = self._create_table(data)
+        data_frame = pd.DataFrame(table_data)
+        return data_frame
+
+        #table_str = tabulate(table_data, headers="keys", tablefmt="simple") if table_data else ''
+        #if table_str == '\n':
+        #    raise ValueError('Unable to extract fields for pandas.')
+        #return table_str + '\n'

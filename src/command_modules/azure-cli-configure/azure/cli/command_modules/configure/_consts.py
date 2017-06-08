@@ -8,7 +8,8 @@ OUTPUT_LIST = [
     {'name': 'jsonc',
      'desc': 'Colored JSON formatted output that most closely matches API responses'},
     {'name': 'table', 'desc': 'Human-readable output format'},
-    {'name': 'tsv', 'desc': 'Tab and Newline delimited, great for GREP, AWK, etc.'}
+    {'name': 'tsv', 'desc': 'Tab and Newline delimited, great for GREP, AWK, etc.'},
+    {'name': 'pandas', 'desc': 'Generates a Pandas DataFrame for use in a Jupyter Notebooks'}
 ]
 
 LOGIN_METHOD_LIST = [
